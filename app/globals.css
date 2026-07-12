@@ -8,11 +8,11 @@ html,
 body {
   background: #060907;
   color: #dcefe2;
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 .mono {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-family: var(--font-dm-mono), ui-monospace, Consolas, monospace;
 }
 
 .term-border {

@@ -88,21 +88,57 @@ export async function chatOpenAI(opts: {
   }
 }
 
-// ---------- OpenRouter → Claude (jury) ----------
+// ---------- Claude (jury): primary = user's own RelayRouter relay, fallback = OpenRouter ----------
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export async function chatClaude(opts: {
   system: string
   user: string
   maxTokens?: number
-  model?: string
 }): Promise<string> {
   try {
-    return await chatClaudeOnce(opts)
+    return await chatRelayRouter({ ...opts, model: 'claude-sonnet-5' })
   } catch (e) {
-    console.error('[llm] claude attempt 1 failed, retrying:', (e as Error).message)
-    await sleep(1800)
-    return await chatClaudeOnce(opts)
+    console.error('[llm] relayrouter jury failed, falling back to openrouter:', (e as Error).message)
+    await sleep(1200)
+    return await chatClaudeOnce({ ...opts, model: 'anthropic/claude-sonnet-5' })
+  }
+}
+
+// OpenAI-compatible chat against relayrouter.io (hosts claude-* models)
+export async function chatRelayRouter(opts: {
+  system: string
+  user: string
+  maxTokens?: number
+  model?: string
+}): Promise<string> {
+  const { system, user, maxTokens = 500, model = 'claude-sonnet-5' } = opts
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 90_000)
+  try {
+    const res = await fetch('https://relayrouter.io/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.RELAYROUTER_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        max_tokens: maxTokens,
+      }),
+      signal: ctrl.signal,
+    })
+    if (!res.ok) throw new Error(`relayrouter ${res.status}: ${(await res.text()).slice(0, 300)}`)
+    const json = await res.json()
+    const content = json.choices?.[0]?.message?.content
+    if (!content) throw new Error('relayrouter: empty completion')
+    return content.trim()
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -144,7 +180,7 @@ async function chatClaudeOnce(opts: {
   }
 }
 
-// ---------- reliability wrapper: live call → cache → canned fallback ----------
+// ---------- reliability wrapper: live call -> cache -> canned fallback ----------
 export async function reliable(
   key: string,
   live: () => Promise<string>,

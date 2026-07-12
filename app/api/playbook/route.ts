@@ -9,6 +9,6 @@ export async function POST(req: Request) {
     return Response.json({ error: 'playbook too short' }, { status: 400 })
   }
   getStore().state.playbook = body.playbook.slice(0, 4000)
-  ev('📘', 'CEO updated the Playbook — the human experience layer just changed')
+  ev('BOOK', 'CEO updated the Playbook, the human experience layer just changed')
   return Response.json({ ok: true })
 }

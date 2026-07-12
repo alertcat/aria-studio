@@ -3,29 +3,45 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { bradleyTerry, type Comparison } from './bt'
 import { chatOpenAI, chatClaude, reliable, cacheKey } from './llm'
+import { generateVideo, VIDEO_MODEL_FAST } from './video'
 
 // ============================== types ==============================
 
 export type AgentDef = {
   id: string
+  tag: string
   name: string
   role: string
   style: string
-  emoji: string
   feeUsd: number
   reputation: number
   delivered: number
   status: 'idle' | 'working'
 }
 
-export type Draft = { agentId: string; content: string; cached: boolean; revised?: boolean }
+export type Concept = {
+  concept: string
+  hook: string
+  beats: string[]
+  style: string
+  video_prompt: string
+}
+
+export type Draft = {
+  agentId: string
+  content: string
+  concept: Concept
+  cached: boolean
+  revised?: boolean
+}
 export type Duel = { a: string; b: string; winner: string; judge: string; reason: string }
 export type RankEntry = { agentId: string; score: number; wins: number }
 
 export type OrderStatus =
   | 'inbox'
-  | 'drafting'
+  | 'concepting'
   | 'jury'
+  | 'producing'
   | 'review'
   | 'revising'
   | 'delivered'
@@ -43,12 +59,15 @@ export type Order = {
   duels: Duel[]
   ranking: RankEntry[]
   winnerAgentId?: string
+  videoFile?: string
+  videoProgress?: number
+  videoNote?: string
   feedback?: string
-  invoice?: { id: string; paidAt: number; tx: string }
+  invoice?: { id: string; paidAt: number; ref: string }
   error?: string
 }
 
-export type Ev = { t: number; icon: string; text: string; orderId?: string }
+export type Ev = { t: number; tag: string; text: string; orderId?: string }
 
 export type State = {
   orders: Order[]
@@ -63,48 +82,48 @@ export type State = {
 export const COMPANY = {
   name: 'SoloCorp OS',
   ceo: 'alertcat',
-  vertical: 'AI × Crypto research, delivered as a service',
+  vertical: 'one-person ad studio: agents ship real video, human acceptance releases escrow',
 }
 
-const DEFAULT_PLAYBOOK = `1. Every deliverable ends with a decision: RECOMMEND / HOLD / AVOID, with a confidence %.
-2. Quantify everything. When estimating, state the assumption next to the number.
-3. Separate verified facts from interpretation. Flag anything unverifiable.
-4. Client-ready tone: no fluff, no marketing language, no hedging walls.
-5. Crypto topics: always cover mechanism-design risk and regulatory posture.`
+const DEFAULT_PLAYBOOK = `1. First frame must hook in half a second. No slow fades, no logo intros.
+2. One idea per ad. If the concept needs a sentence of explanation, kill it.
+3. Native vertical 9:16, designed for sound-off viewing.
+4. Never render on-screen text, UI, logos or celebrity likeness in generated footage.
+5. End on the product hero shot. Brand recall beats cleverness.`
 
 export const WORKERS: AgentDef[] = [
   {
-    id: 'atlas',
-    name: 'Atlas',
-    role: 'Staff Analyst',
+    id: 'volt',
+    tag: 'VT',
+    name: 'VOLT',
+    role: 'Hype Director',
     style:
-      'rigorous structure: crisp definitions, comparison tables, numbered frameworks. Conservative, precise.',
-    emoji: '🧭',
-    feeUsd: 18,
-    reputation: 12,
+      'kinetic high-energy social-native ads: whip pans, speed ramps, punchy cuts, bold saturated color, UGC adrenaline',
+    feeUsd: 25,
+    reputation: 10,
     delivered: 0,
     status: 'idle',
   },
   {
-    id: 'nova',
-    name: 'Nova',
-    role: 'Contrarian Researcher',
+    id: 'sable',
+    tag: 'SB',
+    name: 'SABLE',
+    role: 'Cinematic Director',
     style:
-      'risk-first: leads with failure modes, attack surfaces, and what everyone else is missing. Sharp, opinionated.',
-    emoji: '🕶️',
-    feeUsd: 18,
-    reputation: 11,
+      'premium filmic ads: slow deliberate camera moves, dramatic rim light, macro textures, moody atmosphere, luxury restraint',
+    feeUsd: 25,
+    reputation: 10,
     delivered: 0,
     status: 'idle',
   },
   {
-    id: 'quant',
-    name: 'Quant',
-    role: 'Data Analyst',
+    id: 'pixel',
+    tag: 'PX',
+    name: 'PIXEL',
+    role: 'Playful Director',
     style:
-      'numbers-first: unit economics, market sizing, on-chain/usage metrics, sensitivity ranges. Terse and dense.',
-    emoji: '📐',
-    feeUsd: 18,
+      'colorful quirky concepts: unexpected juxtapositions, toy-like miniature worlds, stop-motion energy, wit over polish',
+    feeUsd: 25,
     reputation: 10,
     delivered: 0,
     status: 'idle',
@@ -113,40 +132,40 @@ export const WORKERS: AgentDef[] = [
 
 export const JUDGES = [
   {
-    id: 'rigor',
-    name: 'Judge Rigor',
+    id: 'brand',
+    name: 'Judge BRAND',
     criterion:
-      'factual grounding, internal consistency, and structural clarity. Penalise unsupported claims hard.',
+      'brand fit and message clarity: does this concept sell the actual product on brief, will the client recognise their brand promise, is it feasible as a single 5 second generated shot',
   },
   {
-    id: 'utility',
-    name: 'Judge Utility',
+    id: 'scroll',
+    name: 'Judge SCROLL',
     criterion:
-      'decision-usefulness for the paying client: a clear recommendation, quantified uncertainty, actionable next steps.',
+      'scroll-stopping power: how hard does the first half-second hook, visual novelty, thumb-stopping energy on a muted vertical feed',
   },
 ]
 
 export const TEMPLATES = [
   {
-    client: 'Meridian Capital',
-    title: 'Due-diligence brief: x402 agent-payment protocol',
+    client: 'Kopi Loco',
+    title: '5s vertical bumper: cold brew can launch',
     brief:
-      'We are evaluating infrastructure bets around agent-to-agent payments. Assess the x402 payment protocol: mechanism, adoption signals, competitive landscape (AP2 and others), key risks, and whether a seed-stage infra fund should build exposure now.',
+      'Singapore cold brew brand launching a matte black can. Audience: 20-35 office crowd doomscrolling at 3pm. Feel: the exact moment cold caffeine hits. Premium but not corporate. End on the can.',
+    amountUsd: 380,
+  },
+  {
+    client: 'NightRunner',
+    title: '5s hype bumper: midnight sneaker drop',
+    brief:
+      'Streetwear sneaker drop, neon-on-black city energy, reflective fabric catching light. Audience: sneakerheads on IG reels. Feel: adrenaline before the drop timer hits zero. End on the shoe.',
+    amountUsd: 420,
+  },
+  {
+    client: 'BUIDL OPC SG',
+    title: '5s teaser: hackathon aftermovie',
+    brief:
+      'One-day AI hackathon in Singapore, 300 builders, terminal-green on black aesthetic, laptops, code, energy drinks, the 6pm submission rush. Feel: building the future in one room. End on a glowing screen.',
     amountUsd: 250,
-  },
-  {
-    client: 'Nimbus Labs',
-    title: 'Chain selection memo: Monad vs Base for a consumer app',
-    brief:
-      'We are shipping a consumer social-trading app targeting 100k DAU. Compare Monad and Base on throughput, fees, wallet UX, ecosystem funding, and distribution. End with a single recommended chain and migration triggers.',
-    amountUsd: 180,
-  },
-  {
-    client: 'Kite Studio',
-    title: 'AWS cost plan for a multi-agent AI backend',
-    brief:
-      'Our agent workload runs 30 concurrent LLM pipelines with bursty traffic. Propose an AWS architecture (Bedrock vs self-hosted on EC2/GPU, Lambda vs ECS, caching strategy) with a monthly cost estimate at 3 scale tiers and the top 3 cost-optimisation levers.',
-    amountUsd: 120,
   },
 ]
 
@@ -154,6 +173,7 @@ export const TEMPLATES = [
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const STATE_PATH = path.join(DATA_DIR, 'state.json')
+const MEDIA_DIR = path.join(process.cwd(), 'public', 'media')
 
 type Store = {
   state: State
@@ -175,26 +195,27 @@ function createStore(): Store {
   }
   try {
     const disk = JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8'))
-    store.state = { ...freshState(), ...disk.state }
-    // orders stuck mid-pipeline from a previous process: park them back in review-able states
-    for (const o of store.state.orders) {
-      if (o.status === 'drafting' || o.status === 'jury' || o.status === 'revising') {
-        o.status = o.drafts?.length === 3 && o.ranking?.length ? 'review' : 'inbox'
-      }
-    }
-    if (disk.agents) {
-      for (const a of store.agents) {
-        const d = disk.agents.find((x: AgentDef) => x.id === a.id)
-        if (d) {
-          a.reputation = d.reputation
-          a.delivered = d.delivered
+    if (disk.schema === 2) {
+      store.state = { ...freshState(), ...disk.state }
+      for (const o of store.state.orders) {
+        if (['concepting', 'jury', 'producing', 'revising'].includes(o.status)) {
+          o.status = o.drafts?.length === 3 && o.ranking?.length ? 'review' : 'inbox'
         }
-        a.status = 'idle'
       }
+      if (disk.agents) {
+        for (const a of store.agents) {
+          const d = disk.agents.find((x: AgentDef) => x.id === a.id)
+          if (d) {
+            a.reputation = d.reputation
+            a.delivered = d.delivered
+          }
+          a.status = 'idle'
+        }
+      }
+      store.seq = disk.seq ?? store.state.orders.length + 1
     }
-    store.seq = disk.seq ?? store.state.orders.length + 1
   } catch {
-    /* first boot */
+    /* first boot or old schema: start fresh */
   }
   return store
 }
@@ -215,7 +236,7 @@ function saveSoon() {
       fs.mkdirSync(DATA_DIR, { recursive: true })
       fs.writeFileSync(
         STATE_PATH,
-        JSON.stringify({ state: S.state, agents: S.agents, seq: S.seq }, null, 1),
+        JSON.stringify({ schema: 2, state: S.state, agents: S.agents, seq: S.seq }, null, 1),
       )
     } catch (e) {
       console.error('[store] persist failed', e)
@@ -223,8 +244,8 @@ function saveSoon() {
   }, 400)
 }
 
-export function ev(icon: string, text: string, orderId?: string) {
-  S.state.events.unshift({ t: Date.now(), icon, text, orderId })
+export function ev(tag: string, text: string, orderId?: string) {
+  S.state.events.unshift({ t: Date.now(), tag, text, orderId })
   if (S.state.events.length > 300) S.state.events.length = 300
   saveSoon()
 }
@@ -232,64 +253,78 @@ export function ev(icon: string, text: string, orderId?: string) {
 function agent(id: string) {
   return S.agents.find((a) => a.id === id)!
 }
-function agentName(id: string) {
-  const a = agent(id)
-  return `${a.emoji} ${a.name}`
-}
 
 // ============================== prompts ==============================
 
 function workerSystem(w: AgentDef, playbook: string) {
-  return `You are ${w.name}, ${w.role} at SoloCorp — a one-person company where a human CEO directs a team of AI agents. Your writing style: ${w.style}
+  return `You are ${w.name}, ${w.role} at SoloCorp Studio, a one-person ad studio where a human CEO directs AI creative agents. Your signature style: ${w.style}.
 
-The CEO's Playbook below encodes the human founder's professional experience and quality bar. It overrides everything else. Follow it strictly:
+The CEO Playbook below is the human founder's creative quality bar. It overrides everything:
 ${playbook}
 
-Produce a client-ready deliverable in Markdown (450-650 words): start with a 3-line executive summary, then structured sections, end with the decision block required by the Playbook. No preamble, no meta-commentary — output the deliverable only.`
+Task: produce ONE ad concept for the client brief. Reply ONLY with minified JSON, no markdown fences, exactly this shape:
+{"concept":"two word name","hook":"what stops the scroll in the first half second, one sentence","beats":["beat 1","beat 2","beat 3"],"style":"visual treatment in ten words","video_prompt":"60-100 word English prompt for a text-to-video model: one continuous shot, concrete subject and setting, explicit camera movement, lighting, mood, pacing, photorealistic detail. No on-screen text, no logos, no brand names, no watermarks."}`
 }
 
 function orderUser(o: Order) {
   let u = `Client: ${o.client}\nOrder: ${o.title}\nBudget: $${o.amountUsd}\nBrief: ${o.brief}`
   if (o.feedback && o.revision > 0) {
-    u += `\n\nCEO REVISION FEEDBACK (rev ${o.revision}) — address every point fully:\n${o.feedback}`
+    u += `\n\nCEO REVISION FEEDBACK (rev ${o.revision}), address every point in a new concept JSON:\n${o.feedback}`
   }
   return u
 }
 
 function judgeSystem(j: { name: string; criterion: string }) {
-  return `You are ${j.name} on the AI quality jury of SoloCorp. Two anonymous drafts (A and B) answer the same paid client order. Your single criterion: ${j.criterion}
+  return `You are ${j.name} on the creative jury of SoloCorp Studio. Two anonymous ad concepts (A and B) answer the same paid client brief. Your single criterion: ${j.criterion}.
 
-Reply ONLY with minified JSON: {"winner":"A"|"B","reason":"<one crisp sentence, max 18 words>"}`
+Reply ONLY with minified JSON: {"winner":"A"|"B","reason":"one crisp sentence, max 18 words"}`
 }
 
 function duelUser(o: Order, a: Draft, b: Draft) {
-  return `Order: ${o.title}\nClient brief: ${o.brief.slice(0, 400)}\n\n--- DRAFT A ---\n${a.content.slice(0, 12000)}\n\n--- DRAFT B ---\n${b.content.slice(0, 12000)}`
+  return `Brief: ${o.title}. ${o.brief.slice(0, 400)}\n\n--- CONCEPT A ---\n${JSON.stringify(a.concept, null, 1)}\n\n--- CONCEPT B ---\n${JSON.stringify(b.concept, null, 1)}`
 }
 
-// ============================== fallbacks (offline insurance) ==============================
+// ============================== parsing & fallbacks ==============================
 
-function fallbackDraft(w: AgentDef, o: Order): string {
-  return `## Executive Summary
-${o.title} — assessment prepared by ${w.name} (${w.role}). Network fallback draft: structure intact, live model output unavailable.
+function parseConcept(raw: string, w: AgentDef, o: Order): Concept {
+  try {
+    const m = raw.match(/\{[\s\S]*\}/)
+    if (m) {
+      const p = JSON.parse(m[0])
+      if (p.video_prompt) {
+        return {
+          concept: String(p.concept || 'untitled').slice(0, 60),
+          hook: String(p.hook || '').slice(0, 200),
+          beats: Array.isArray(p.beats) ? p.beats.map((b: unknown) => String(b).slice(0, 140)).slice(0, 4) : [],
+          style: String(p.style || '').slice(0, 120),
+          video_prompt: String(p.video_prompt).slice(0, 900),
+        }
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  return fallbackConcept(w, o)
+}
 
-## Analysis
-- Scope: ${o.brief.slice(0, 180)}…
-- ${w.id === 'atlas' ? 'Framework: market structure → mechanism → adoption → risk.' : ''}${w.id === 'nova' ? 'Lead risk: consensus optimism is unpriced; failure modes dominate the tail.' : ''}${w.id === 'quant' ? 'Base case sized from comparable adoption curves; ±40% sensitivity band.' : ''}
-- Key considerations were compiled from the CEO Playbook quality bar.
-
-## Decision
-**HOLD — confidence 55%.** Re-run with live model access for the full quantified brief.`
+function fallbackConcept(w: AgentDef, o: Order): Concept {
+  return {
+    concept: `${w.name} fallback`,
+    hook: 'Product macro with dramatic light, offline fallback concept.',
+    beats: ['macro texture reveal', 'slow orbital move', 'hero shot'],
+    style: w.style.split(':')[0],
+    video_prompt: `Macro product shot related to: ${o.title}. Dramatic rim lighting, slow orbital camera move, premium commercial aesthetic, shallow depth of field, photorealistic, moody atmosphere, single continuous shot.`,
+  }
 }
 
 function fallbackVerdict(): string {
-  return '{"winner":"A","reason":"Offline fallback: first draft retained by default."}'
+  return '{"winner":"A","reason":"Offline fallback verdict, first concept retained."}'
 }
 
 // ============================== pipeline ==============================
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-// replayed cache hits get a human-scale delay so the pipeline still reads as live work
 async function pace(cached: boolean, baseMs: number, jitterMs: number) {
   if (cached) await sleep(baseMs + Math.random() * jitterMs)
 }
@@ -308,25 +343,25 @@ async function pooled<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[
   return results
 }
 
-async function draftOne(o: Order, w: AgentDef): Promise<Draft> {
+async function conceptOne(o: Order, w: AgentDef): Promise<Draft> {
   w.status = 'working'
-  ev(w.emoji, `${w.name} started drafting "${o.title}"${o.revision ? ` (rev ${o.revision})` : ''}`, o.id)
-  const key = cacheKey('draft', o.title, w.id, o.revision)
+  ev(w.tag, `${w.name} is concepting "${o.title}"${o.revision ? ` rev ${o.revision}` : ''}`, o.id)
+  const key = cacheKey('concept', o.title, w.id, o.revision)
   const { content, cached } = await reliable(
     key,
-    () => chatOpenAI({ system: workerSystem(w, S.state.playbook), user: orderUser(o) }),
-    () => fallbackDraft(w, o),
+    () => chatOpenAI({ system: workerSystem(w, S.state.playbook), user: orderUser(o), maxTokens: 2200 }),
+    () => JSON.stringify(fallbackConcept(w, o)),
   )
-  await pace(cached, 2500, 4000)
+  await pace(cached, 2000, 3500)
   w.status = 'idle'
-  const words = content.split(/\s+/).length
-  ev(w.emoji, `${w.name} submitted a draft — ${words} words`, o.id)
-  return { agentId: w.id, content, cached }
+  const concept = parseConcept(content, w, o)
+  ev(w.tag, `${w.name} pitched "${concept.concept}": ${concept.hook.slice(0, 80)}`, o.id)
+  return { agentId: w.id, content, concept, cached }
 }
 
 async function runJury(o: Order) {
   o.status = 'jury'
-  ev('⚖️', `AI Jury convened for "${o.title}": 3 pairwise duels × ${JUDGES.length} Claude judges`, o.id)
+  ev('JURY', `Creative jury convened for "${o.title}": 3 pairwise duels x ${JUDGES.length} Claude judges`, o.id)
   saveSoon()
 
   const pairs: [number, number][] = [
@@ -344,9 +379,9 @@ async function runJury(o: Order) {
         () => chatClaude({ system: judgeSystem(judge), user: duelUser(o, A, B) }),
         fallbackVerdict,
       )
-      await pace(cached, 900, 1800)
+      await pace(cached, 800, 1600)
       let winner = A.agentId
-      let reason = 'structured coverage edge'
+      let reason = 'stronger concept coverage'
       try {
         const m = content.match(/\{[\s\S]*\}/)
         if (m) {
@@ -358,8 +393,8 @@ async function runJury(o: Order) {
         /* keep defaults */
       }
       ev(
-        '⚔️',
-        `Duel ${agentName(A.agentId)} vs ${agentName(B.agentId)} — ${judge.name} → ${agentName(winner)}: “${reason}”`,
+        'DUEL',
+        `${agent(A.agentId).name} vs ${agent(B.agentId).name}, ${judge.name} -> ${agent(winner).name}: ${reason}`,
         o.id,
       )
       return { a: A.agentId, b: B.agentId, winner, judge: judge.name, reason }
@@ -384,30 +419,112 @@ async function runJury(o: Order) {
 
   o.winnerAgentId = o.ranking[0].agentId
   agent(o.winnerAgentId).reputation += 2
-  o.status = 'review'
   ev(
-    '👤',
-    `Bradley-Terry ranking complete — top draft: ${agentName(o.winnerAgentId)} (${(
-      o.ranking[0].score * 100
-    ).toFixed(0)}% BT) → CEO Acceptance Gate`,
+    'RANK',
+    `Bradley-Terry verdict: ${agent(o.winnerAgentId).name} wins with ${(o.ranking[0].score * 100).toFixed(0)}% strength, concept goes to production`,
     o.id,
   )
   saveSoon()
+}
+
+async function runProduction(o: Order) {
+  const winner = o.drafts.find((d) => d.agentId === o.winnerAgentId)!
+  o.status = 'producing'
+  o.videoProgress = 0
+  o.videoNote = undefined
+  ev('PROD', `Studio rendering "${winner.concept.concept}" (Seedance 2.0, 5s vertical)`, o.id)
+  saveSoon()
+
+  const vKey = cacheKey('video', o.title, o.winnerAgentId ?? '', o.revision)
+  const fileName = `${o.id}_r${o.revision}.mp4`
+  const absPath = path.join(MEDIA_DIR, fileName)
+
+  // cache replay: same title + winner + revision already rendered on disk
+  const { cachedVideoFile } = readVideoCache(vKey)
+  if (cachedVideoFile && fs.existsSync(path.join(MEDIA_DIR, cachedVideoFile))) {
+    for (const p of [12, 34, 58, 79, 96]) {
+      o.videoProgress = p
+      saveSoon()
+      await sleep(1200 + Math.random() * 900)
+    }
+    o.videoFile = `/media/${cachedVideoFile}`
+    o.videoProgress = 100
+    o.status = 'review'
+    ev('GATE', `Render complete, cut is on the CEO desk for acceptance`, o.id)
+    saveSoon()
+    return
+  }
+
+  try {
+    let lastLogged = -20
+    await generateVideo(
+      winner.concept.video_prompt,
+      absPath,
+      (pct) => {
+        o.videoProgress = pct
+        if (pct - lastLogged >= 20 && pct < 100) {
+          lastLogged = pct
+          ev('PROD', `Rendering ${pct}%`, o.id)
+        }
+        saveSoon()
+      },
+      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_FAST, maxWaitS: 420 },
+    )
+    o.videoFile = `/media/${fileName}`
+    o.videoProgress = 100
+    writeVideoCache(vKey, fileName)
+    o.status = 'review'
+    ev('GATE', `Render complete, cut is on the CEO desk for acceptance`, o.id)
+  } catch (e) {
+    console.error('[video] render failed:', (e as Error).message)
+    o.videoNote = `Render failed (${(e as Error).message.slice(0, 80)}). Concept and storyboard ready for review.`
+    o.videoProgress = undefined
+    o.status = 'review'
+    ev('ERR', `Render failed for "${o.title}", concept sent to gate without footage`, o.id)
+  }
+  saveSoon()
+}
+
+// video cache index lives inside data/video-cache.json
+const VIDEO_CACHE_PATH = path.join(DATA_DIR, 'video-cache.json')
+function readVideoCache(key: string): { cachedVideoFile?: string } {
+  try {
+    const idx = JSON.parse(fs.readFileSync(VIDEO_CACHE_PATH, 'utf-8'))
+    return { cachedVideoFile: idx[key] }
+  } catch {
+    return {}
+  }
+}
+function writeVideoCache(key: string, fileName: string) {
+  let idx: Record<string, string> = {}
+  try {
+    idx = JSON.parse(fs.readFileSync(VIDEO_CACHE_PATH, 'utf-8'))
+  } catch {
+    /* fresh */
+  }
+  idx[key] = fileName
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true })
+    fs.writeFileSync(VIDEO_CACHE_PATH, JSON.stringify(idx, null, 1))
+  } catch {
+    /* non-fatal */
+  }
 }
 
 export async function runPipeline(orderId: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o) return
   try {
-    o.status = 'drafting'
+    o.status = 'concepting'
     o.error = undefined
     saveSoon()
-    o.drafts = await Promise.all(WORKERS.map((w) => draftOne(o, agent(w.id))))
+    o.drafts = await Promise.all(WORKERS.map((w) => conceptOne(o, agent(w.id))))
     await runJury(o)
+    await runProduction(o)
   } catch (e) {
     o.error = (e as Error).message
     o.status = o.drafts?.length === 3 ? 'review' : 'inbox'
-    ev('🚨', `Pipeline error on "${o.title}": ${o.error?.slice(0, 120)}`, o.id)
+    ev('ERR', `Pipeline error on "${o.title}": ${o.error?.slice(0, 120)}`, o.id)
     saveSoon()
   }
 }
@@ -420,28 +537,31 @@ export async function runRevision(orderId: string, feedback: string) {
     o.revision += 1
     o.feedback = feedback
     const w = agent(o.winnerAgentId)
-    ev('↩️', `CEO rejected "${o.title}" — sent back to ${agentName(w.id)} with feedback`, o.id)
+    ev('REV', `CEO sent "${o.title}" back to ${w.name} with notes`, o.id)
     saveSoon()
 
     w.status = 'working'
-    const key = cacheKey('revise', o.title, w.id, o.revision)
+    const key = cacheKey('concept-rev', o.title, w.id, o.revision)
     const prev = o.drafts.find((d) => d.agentId === w.id)!
     const { content, cached } = await reliable(
       key,
       () =>
         chatOpenAI({
           system: workerSystem(w, S.state.playbook),
-          user: `${orderUser(o)}\n\nYOUR PREVIOUS DRAFT (improve it, do not start over):\n${prev.content}`,
+          user: `${orderUser(o)}\n\nYOUR PREVIOUS CONCEPT (improve it, keep what worked):\n${JSON.stringify(prev.concept)}`,
+          maxTokens: 2200,
         }),
-      () => prev.content + `\n\n> rev ${o.revision}: offline fallback, previous draft retained.`,
+      () => JSON.stringify(prev.concept),
     )
+    await pace(cached, 1500, 2500)
     w.status = 'idle'
     prev.content = content
+    prev.concept = parseConcept(content, w, o)
     prev.revised = true
     prev.cached = cached
-    o.status = 'review'
-    ev(w.emoji, `${w.name} delivered revision ${o.revision} → back to Acceptance Gate`, o.id)
+    ev(w.tag, `${w.name} delivered revised concept "${prev.concept.concept}", re-rendering`, o.id)
     saveSoon()
+    await runProduction(o)
   } catch (e) {
     o.status = 'review'
     o.error = (e as Error).message
@@ -460,7 +580,7 @@ export function approveOrder(orderId: string) {
   o.invoice = {
     id: `INV-2026-${String(seq).padStart(4, '0')}`,
     paidAt: Date.now(),
-    tx: `0x${hash.slice(0, 40)} · Base Sepolia · simulated x402 settlement`,
+    ref: `0x${hash.slice(0, 40)} (Base Sepolia, simulated x402 settlement)`,
   }
   o.status = 'delivered'
   S.state.revenue += o.amountUsd
@@ -470,8 +590,7 @@ export function approveOrder(orderId: string) {
     w.delivered += 1
     w.reputation += 3
   }
-  ev('✅', `CEO accepted "${o.title}"`, o.id)
-  ev('💸', `Escrow released → treasury +$${o.amountUsd} · ${o.invoice.id} → ${o.client}`, o.id)
+  ev('PAID', `CEO accepted "${o.title}". Escrow released, treasury +$${o.amountUsd}, ${o.invoice.id} sent to ${o.client}`, o.id)
   saveSoon()
 }
 
@@ -495,7 +614,7 @@ export function createOrder(input: {
     ranking: [],
   }
   S.state.orders.unshift(o)
-  ev('📥', `New order from ${o.client}: "${o.title}" — $${o.amountUsd} locked in escrow`, o.id)
+  ev('ESCROW', `New brief from ${o.client}: "${o.title}", $${o.amountUsd} locked in escrow`, o.id)
   saveSoon()
   return o
 }
@@ -504,7 +623,7 @@ export function resetCompany() {
   S.state = freshState()
   S.agents = WORKERS.map((w) => ({ ...w }))
   S.seq = 1
-  ev('🧹', 'Company state reset — fresh books')
+  ev('BOOK', 'Company reset, fresh books')
   saveSoon()
 }
 
