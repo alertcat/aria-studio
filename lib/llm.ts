@@ -158,7 +158,7 @@ async function chatClaudeOnce(opts: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'HTTP-Referer': 'https://solocorp.dev',
-        'X-Title': 'SoloCorp OS',
+        'X-Title': 'AAA Studio',
       },
       body: JSON.stringify({
         model,

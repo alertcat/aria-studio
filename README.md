@@ -1,4 +1,4 @@
-# SoloCorp Studio
+﻿# AAA Studio: Agents. Ads. Accepted.
 
 **1 human x 3 agents = a media production company.**
 Director agents pitch concepts, a Claude jury ranks them through pairwise duels, the human CEO greenlights the spend, Seedance renders real footage, gpt-image-2 ships the key visual, and the CEO's final acceptance releases escrow, with USDC settlement on Base Sepolia.
@@ -7,7 +7,7 @@ Built solo in one day at **BUIDL_OPC_Hackathon_SG** (Singapore, 2026-07-12). All
 
 ## The real problem
 
-A 5-second vertical spot still costs an SMB hundreds to thousands of dollars and days of agency turnaround. Text-to-video collapsed the render cost, but a render button is not a business. Clients pay for concept development, taste, quality control, revisions, and a commercial loop where money moves on acceptance. That workflow layer is what a one-person studio actually sells. SoloCorp Studio is that layer, run by agents, gated by a human, in the three verticals its render infrastructure (RelayDance) already serves commercially: **product ads, travel promos, science explainers**.
+A 5-second vertical spot still costs an SMB hundreds to thousands of dollars and days of agency turnaround. Text-to-video collapsed the render cost, but a render button is not a business. Clients pay for concept development, taste, quality control, revisions, and a commercial loop where money moves on acceptance. That workflow layer is what a one-person studio actually sells. AAA Studio is that layer, run by agents, gated by a human, in the three verticals its render infrastructure (RelayDance) already serves commercially: **product ads, travel promos, science explainers**.
 
 The deliverable is never a wall of text. It is a watchable cut plus a campaign key visual.
 
@@ -23,7 +23,7 @@ The deliverable is never a wall of text. It is a watchable cut plus a campaign k
 
 ## Why the jury matters
 
-Single-shot "rate this 1-10" scoring is vibes. SoloCorp ranks concepts the way real juries work: independent Claude judges compare every pair head-to-head on different criteria (client fit vs scroll-stopping power), and **Bradley-Terry MLE** aggregates the verdicts into a ranking. This exact mechanism took **rank 1 on GG24 Deep Funding Level 3** (Ethereum Foundation / Gitcoin), scored against hidden human jury ground truth. Here it doubles as the economic filter: cents of text duels protect dollars of render spend.
+Single-shot "rate this 1-10" scoring is vibes. AAA Studio ranks concepts the way real juries work: independent Claude judges compare every pair head-to-head on different criteria (client fit vs scroll-stopping power), and **Bradley-Terry MLE** aggregates the verdicts into a ranking. This exact mechanism took **rank 1 on GG24 Deep Funding Level 3** (Ethereum Foundation / Gitcoin), scored against hidden human jury ground truth. Here it doubles as the economic filter: cents of text duels protect dollars of render spend.
 
 ## Architecture
 

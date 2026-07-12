@@ -2,58 +2,58 @@
 
 :root {
   color-scheme: dark;
-  --accent-a: #635bff;
-  --accent-b: #9066ff;
+  --accent: #34d399; /* emerald-400: the single accent, money-coded */
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
 body {
-  background: #0a0a0c;
+  background: #09090b;
   color: #fafafa;
-  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  letter-spacing: -0.01em;
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.011em;
+}
+
+.mono {
+  font-family: var(--font-geist-mono), ui-monospace, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .nums {
   font-variant-numeric: tabular-nums;
 }
 
-/* hero backdrop: quiet radial glow, Stripe-style */
-.hero-glow {
+/* quiet emerald wash behind the hero, single-hue, not a mesh */
+.hero-wash {
   background:
-    radial-gradient(1100px 480px at 18% -10%, rgba(99, 91, 255, 0.14), transparent 60%),
-    radial-gradient(900px 420px at 85% -15%, rgba(144, 102, 255, 0.1), transparent 55%);
+    radial-gradient(1000px 420px at 82% -12%, rgba(52, 211, 153, 0.07), transparent 60%),
+    radial-gradient(700px 300px at 8% -8%, rgba(52, 211, 153, 0.04), transparent 55%);
 }
 
 .card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  border-radius: 16px;
 }
 
 .card-quiet {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-}
-
-.accent-text {
-  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  border-radius: 16px;
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, #6f66ff, #5a50f0);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  background: var(--accent);
+  color: #052e1b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transition: filter 0.15s ease, transform 0.1s ease;
 }
 .btn-primary:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.07);
 }
 .btn-primary:active {
   transform: translateY(1px);
@@ -62,11 +62,15 @@ body {
 .btn-ghost {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e4e4e7;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .btn-ghost:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.btn-ghost:active {
+  transform: translateY(1px);
 }
 
 .hover-lift {
@@ -74,8 +78,8 @@ body {
 }
 .hover-lift:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes pulse-soft {
@@ -94,11 +98,21 @@ body {
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0.05) 25%,
-    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.11) 50%,
     rgba(255, 255, 255, 0.05) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-soft,
+  .shimmer {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -118,4 +132,10 @@ body {
 
 video {
   background: #000;
+}
+
+input,
+select,
+textarea {
+  accent-color: var(--accent);
 }

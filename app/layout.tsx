@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
+const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'SoloCorp Studio, a one-person media company run by agents',
+  title: 'AAA Studio: Agents. Ads. Accepted.',
   description:
-    'Agents concept, a Claude jury ranks concepts through pairwise duels and Bradley-Terry, Seedance renders real footage, gpt-image-2 ships the key visual, and the human CEO greenlights spend and releases escrow. Built at BUIDL_OPC_Hackathon_SG 2026.',
+    'A one-person media company: three AI directors concept, a Claude jury ranks by pairwise duels and Bradley-Terry, Seedance renders real footage, and the human CEO gates every dollar. Built at BUIDL_OPC_Hackathon_SG 2026.',
 }
 
 export default function RootLayout({
@@ -16,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
       <body className="antialiased">{children}</body>
     </html>
   )

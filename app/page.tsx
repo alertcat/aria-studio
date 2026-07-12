@@ -1,6 +1,18 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { motion, useReducedMotion, useMotionValue, useTransform, animate, AnimatePresence } from 'motion/react'
+import {
+  Play,
+  CheckCircle,
+  ArrowRight,
+  ArrowUUpLeft,
+  Scales,
+  FilmSlate,
+  Coins,
+  UserCircleCheck,
+  CircleNotch,
+} from '@phosphor-icons/react'
 
 // ---------- types mirrored from the server ----------
 type Agent = {
@@ -57,35 +69,6 @@ type ApiState = {
   unitCosts: Record<string, number>
 }
 
-const STEPS: { key: string; label: string; reached: (o: Order) => boolean }[] = [
-  { key: 'concepts', label: 'Concepts', reached: (o) => o.status !== 'inbox' },
-  { key: 'jury', label: 'Jury', reached: (o) => o.duels.length > 0 },
-  { key: 'greenlight', label: 'Greenlight', reached: (o) => !!o.winnerAgentId },
-  {
-    key: 'render',
-    label: 'Render',
-    reached: (o) => !!o.videoFile || o.status === 'producing' || !!o.videoNote,
-  },
-  { key: 'gate', label: 'Gate', reached: (o) => o.status === 'review' || o.status === 'delivered' },
-  { key: 'paid', label: 'Paid', reached: (o) => o.status === 'delivered' },
-]
-
-const TAG_STYLE: Record<string, string> = {
-  DUEL: 'text-amber-300',
-  RANK: 'text-amber-200',
-  JURY: 'text-amber-300',
-  GLGHT: 'text-indigo-300',
-  PROD: 'text-violet-300',
-  IMG: 'text-violet-300',
-  GATE: 'text-zinc-100',
-  PAID: 'text-emerald-400',
-  CHAIN: 'text-emerald-300',
-  ESCROW: 'text-sky-300',
-  REV: 'text-orange-300',
-  ERR: 'text-red-400',
-  BOOK: 'text-zinc-300',
-}
-
 const STATUS_LABEL: Record<OrderStatus, string> = {
   inbox: 'Queued',
   concepting: 'Concepting',
@@ -97,6 +80,28 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   delivered: 'Paid',
 }
 
+const TAG_STYLE: Record<string, string> = {
+  PAID: 'text-emerald-400',
+  CHAIN: 'text-emerald-400',
+  GLGHT: 'text-emerald-300',
+  GATE: 'text-zinc-100',
+  DUEL: 'text-amber-300',
+  RANK: 'text-amber-200',
+  JURY: 'text-amber-300',
+  REV: 'text-amber-400',
+  ERR: 'text-red-400',
+  PROD: 'text-zinc-300',
+  IMG: 'text-zinc-300',
+  ESCROW: 'text-zinc-200',
+  BOOK: 'text-zinc-400',
+}
+
+const PORTRAIT: Record<string, string> = {
+  hale: '/media/team-hale.png',
+  wander: '/media/team-wander.png',
+  sage: '/media/team-sage.png',
+}
+
 function fmtTime(t: number) {
   return new Date(t).toLocaleTimeString('en-GB', { hour12: false })
 }
@@ -104,7 +109,23 @@ function money(n: number) {
   return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
+function AnimatedMoney({ value }: { value: number }) {
+  const reduce = useReducedMotion()
+  const mv = useMotionValue(value)
+  const text = useTransform(mv, (v) => '$' + Math.round(v).toLocaleString())
+  useEffect(() => {
+    if (reduce) {
+      mv.set(value)
+      return
+    }
+    const controls = animate(mv, value, { duration: 0.9, ease: [0.16, 1, 0.3, 1] })
+    return () => controls.stop()
+  }, [value, mv, reduce])
+  return <motion.span>{text}</motion.span>
+}
+
 export default function Page() {
+  const reduce = useReducedMotion()
   const [data, setData] = useState<ApiState | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [feedbackText, setFeedbackText] = useState('')
@@ -128,7 +149,7 @@ export default function Page() {
       setData(json)
       if (!selectedRef.current && json.state.orders.length > 0) {
         const prio = (s: OrderStatus) =>
-          ({ greenlight: 0, review: 1, producing: 2, jury: 3, concepting: 4, revising: 2, inbox: 5, delivered: 6 })[s]
+          ({ greenlight: 0, review: 1, producing: 2, revising: 2, jury: 3, concepting: 4, inbox: 5, delivered: 6 })[s]
         const hot = [...json.state.orders].sort((a, b) => prio(a.status) - prio(b.status))[0]
         setSelectedId(hot.id)
       }
@@ -154,13 +175,13 @@ export default function Page() {
 
   if (!data) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0a0a0c]">
-        <div className="text-sm text-zinc-500">Loading SoloCorp Studio</div>
+      <div className="flex min-h-[100dvh] items-center justify-center">
+        <CircleNotch size={22} className="animate-spin text-zinc-600" />
       </div>
     )
   }
 
-  const { state, agents, templates, company } = data
+  const { state, agents, templates } = data
   const orders = state.orders
   const selected = orders.find((o) => o.id === selectedId) ?? null
   const agentOf = (id?: string) => agents.find((a) => a.id === id)
@@ -171,656 +192,731 @@ export default function Page() {
     state.revenue > 0 ? (((state.revenue - cogsDelivered) / state.revenue) * 100).toFixed(1) : null
   const winnerDraft = selected?.drafts.find((d) => d.agentId === selected.winnerAgentId)
 
+  const enter = (delay = 0) =>
+    reduce
+      ? {}
+      : {
+          initial: { opacity: 0, y: 18 },
+          animate: { opacity: 1, y: 0 },
+          transition: { duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] as const },
+        }
+  const inView = (delay = 0) =>
+    reduce
+      ? {}
+      : {
+          initial: { opacity: 0, y: 22 },
+          whileInView: { opacity: 1, y: 0 },
+          viewport: { once: true, amount: 0.25 },
+          transition: { duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] as const },
+        }
+
   return (
-    <div className="min-h-screen">
-      <div className="hero-glow">
-        {/* nav */}
-        <nav className="mx-auto flex max-w-[1500px] items-center justify-between px-6 pb-2 pt-5">
-          <div className="flex items-baseline gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="inline-block h-3.5 w-3.5 rounded-[5px] bg-gradient-to-br from-[#635bff] to-[#9066ff]" />
-              <span className="text-[17px] font-semibold tracking-tight">SoloCorp Studio</span>
-            </div>
-            <span className="hidden text-[13px] text-zinc-500 md:inline">
-              a one-person media company, run by agents
+    <div className="min-h-[100dvh]">
+      {/* nav */}
+      <nav className="sticky top-0 z-40 border-b border-white/5 bg-[#09090b]/85 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="h-3 w-3 rounded-[4px] bg-emerald-400" />
+            <span className="text-[16px] font-semibold tracking-tight">AAA Studio</span>
+            <span className="mono hidden text-[11px] text-zinc-600 sm:inline">Agents. Ads. Accepted.</span>
+          </div>
+          <div className="mono flex items-center gap-5 text-[13px]">
+            <span className="text-zinc-500">
+              revenue <span className="font-medium text-emerald-400"><AnimatedMoney value={state.revenue} /></span>
+            </span>
+            <span className="hidden text-zinc-500 sm:inline">
+              margin <span className="font-medium text-zinc-100">{grossMargin ? `${grossMargin}%` : '--'}</span>
+            </span>
+            <span className="hidden text-zinc-500 md:inline">
+              shipped <span className="font-medium text-zinc-100">{state.delivered}</span>
+            </span>
+            <span className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+              CEO {data.company.ceo}
             </span>
           </div>
-          <div className="flex items-center gap-2.5">
-            <div className="card-quiet nums px-3.5 py-1.5 text-right">
-              <div className="text-[10px] uppercase tracking-wider text-zinc-500">Revenue</div>
-              <div className="text-[15px] font-semibold text-emerald-400">{money(state.revenue)}</div>
-            </div>
-            <div className="card-quiet nums px-3.5 py-1.5 text-right">
-              <div className="text-[10px] uppercase tracking-wider text-zinc-500">Gross margin</div>
-              <div className="text-[15px] font-semibold">{grossMargin ? `${grossMargin}%` : '--'}</div>
-            </div>
-            <div className="card-quiet nums px-3.5 py-1.5 text-right">
-              <div className="text-[10px] uppercase tracking-wider text-zinc-500">Shipped</div>
-              <div className="text-[15px] font-semibold">{state.delivered}</div>
-            </div>
-            <div className="card-quiet px-3.5 py-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-zinc-500">CEO</div>
-              <div className="text-[13px] font-medium">{company.ceo}</div>
-            </div>
-          </div>
-        </nav>
+        </div>
+      </nav>
 
-        {/* hero stage */}
-        <section className="mx-auto grid max-w-[1500px] grid-cols-1 gap-8 px-6 py-6 lg:grid-cols-[400px_minmax(0,1fr)]">
-          {/* stage */}
-          <div className="flex items-start gap-3">
-            {!selected ? (
-              <div className="card flex aspect-[9/16] w-full items-center justify-center">
-                <span className="text-sm text-zinc-500">No order selected</span>
-              </div>
-            ) : selected.videoFile ? (
-              <video
-                key={selected.videoFile}
-                src={selected.videoFile}
-                controls
-                autoPlay
-                muted
-                loop
-                playsInline
-                className="w-full rounded-2xl border border-white/10 shadow-2xl"
-              />
-            ) : selected.status === 'producing' ? (
-              <div className="card flex aspect-[9/16] w-full flex-col items-center justify-center gap-4 p-6">
-                <div className="text-[11px] uppercase tracking-widest text-violet-300">
-                  Studio rendering
-                </div>
-                <div className="nums text-5xl font-semibold">{selected.videoProgress ?? 0}%</div>
-                <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#635bff] to-[#9066ff] transition-all duration-700"
-                    style={{ width: `${selected.videoProgress ?? 2}%` }}
-                  />
-                </div>
-                <div className="text-center text-[11px] text-zinc-500">
-                  Seedance 2.0 mini / 5s / 9:16
-                  <br />
-                  poster rendering in parallel
-                </div>
-              </div>
-            ) : selected.status === 'concepting' || selected.status === 'jury' || selected.status === 'inbox' ? (
-              <div className="card flex aspect-[9/16] w-full flex-col items-center justify-center gap-3 p-6">
-                <div className="shimmer h-2 w-2/3 rounded-full" />
-                <div className="shimmer h-2 w-1/2 rounded-full" />
-                <div className="mt-2 text-[12px] text-zinc-400">{STATUS_LABEL[selected.status]}</div>
-              </div>
-            ) : selected.status === 'greenlight' ? (
-              <div className="card flex aspect-[9/16] w-full flex-col items-center justify-center gap-3 p-6 text-center">
-                <div className="text-[11px] uppercase tracking-widest text-indigo-300">
-                  Awaiting your greenlight
-                </div>
-                <div className="text-[13px] text-zinc-400">
-                  Jury pick:{' '}
-                  <span className="text-zinc-100">
-                    {selected.drafts.find((d) => d.agentId === selected.ranking[0]?.agentId)?.concept.concept}
-                  </span>
-                </div>
-                <div className="text-[11px] text-zinc-500">
-                  Approve a concept on the right to start the render spend
-                </div>
-              </div>
-            ) : (
-              <div className="card flex aspect-[9/16] w-full items-center justify-center p-6 text-center">
-                <span className="text-[12px] text-amber-300/90">
-                  {selected.videoNote ?? 'Revising'}
+      {/* hero */}
+      <header className="hero-wash">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 px-6 pb-14 pt-14 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-14">
+          <div>
+            <motion.h1
+              {...enter(0)}
+              className="text-5xl font-semibold tracking-tighter leading-none md:text-6xl"
+            >
+              Agents ship footage.
+            </motion.h1>
+            <motion.p {...enter(0.08)} className="mt-5 max-w-[46ch] text-[15px] leading-relaxed text-zinc-400">
+              A one-person media company: three AI directors, a Claude jury, real renders, and a
+              human gate on every dollar.
+            </motion.p>
+            <motion.div {...enter(0.16)} className="mt-7 flex items-center gap-3">
+              <a
+                href="#operate"
+                className="btn-primary flex items-center gap-2 rounded-full px-5 py-2.5 text-[13.5px] font-semibold"
+              >
+                Run a live brief <ArrowRight size={15} weight="bold" />
+              </a>
+              <a href="#showcase" className="btn-ghost flex items-center gap-2 rounded-full px-5 py-2.5 text-[13.5px] font-medium">
+                <Play size={15} /> See shipped work
+              </a>
+            </motion.div>
+          </div>
+
+          {/* featured stage */}
+          <motion.div {...enter(0.12)} className="relative">
+            {selected && (
+              <div className="mono mb-2 flex items-center justify-between text-[11.5px] text-zinc-500">
+                <span className="truncate pr-3">
+                  {selected.client} / {selected.title}
+                </span>
+                <span
+                  className={
+                    selected.status === 'delivered' || selected.status === 'review'
+                      ? 'text-emerald-400'
+                      : selected.status === 'greenlight'
+                        ? 'text-emerald-300'
+                        : 'pulse-soft text-amber-300'
+                  }
+                >
+                  {STATUS_LABEL[selected.status]}
                 </span>
               </div>
             )}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={(selected?.id ?? 'none') + (selected?.videoFile ?? '')}
+                initial={reduce ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={reduce ? undefined : { opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {!selected ? (
+                  <div className="card flex aspect-[9/16] items-center justify-center text-[13px] text-zinc-600">
+                    No active order
+                  </div>
+                ) : selected.videoFile ? (
+                  <video
+                    src={selected.videoFile}
+                    controls
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full rounded-2xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                  />
+                ) : selected.status === 'producing' ? (
+                  <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 p-6">
+                    <FilmSlate size={26} className="text-emerald-400" />
+                    <div className="mono text-4xl font-semibold">{selected.videoProgress ?? 0}%</div>
+                    <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-emerald-400 transition-all duration-700"
+                        style={{ width: `${selected.videoProgress ?? 2}%` }}
+                      />
+                    </div>
+                    <div className="mono text-center text-[11px] leading-relaxed text-zinc-500">
+                      Seedance 2.0 mini rendering
+                      <br />
+                      poster in parallel
+                    </div>
+                  </div>
+                ) : selected.status === 'greenlight' ? (
+                  <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 p-7 text-center">
+                    <UserCircleCheck size={28} className="text-emerald-300" />
+                    <div className="text-[15px] font-medium leading-snug">
+                      Three concepts ranked.
+                      <br />
+                      Your call funds the render.
+                    </div>
+                    <a href="#operate" className="btn-primary rounded-full px-4 py-2 text-[12.5px] font-semibold">
+                      Review concepts
+                    </a>
+                  </div>
+                ) : (
+                  <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-3 p-6">
+                    <div className="shimmer h-2 w-2/3 rounded-full" />
+                    <div className="shimmer h-2 w-1/2 rounded-full" />
+                    <div className="mono mt-1 text-[11.5px] text-zinc-500">
+                      {selected ? STATUS_LABEL[selected.status] : ''}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
             {selected?.posterFile && (
               <img
                 src={selected.posterFile}
-                alt="campaign poster"
-                className="hover-lift w-[92px] rounded-xl border border-white/10"
-                title="Campaign key visual (gpt-image-2)"
+                alt="Campaign key visual"
+                className="absolute -left-4 bottom-4 w-[86px] rotate-[-3deg] rounded-lg border border-white/15 shadow-xl"
               />
             )}
+          </motion.div>
+        </div>
+      </header>
+
+      {/* showcase */}
+      <section id="showcase" className="mx-auto max-w-[1400px] px-6 py-14">
+        <motion.div {...inView()} className="mb-5 flex items-end justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Shipped work</h2>
+            <p className="mt-1 text-[13.5px] text-zinc-500">
+              Real renders, accepted by a human, settled from escrow.
+            </p>
           </div>
-
-          {/* order panel */}
-          <div className="min-w-0">
-            {selected && (
-              <>
-                <div className="flex items-center gap-2 text-[12px] text-zinc-400">
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5">
-                    {selected.vertical}
-                  </span>
-                  <span>{selected.client}</span>
-                  <span className="text-zinc-600">/</span>
-                  <span className="nums font-medium text-zinc-200">{money(selected.amountUsd)} in escrow</span>
-                  {selected.revision > 0 && (
-                    <span className="text-orange-300">rev {selected.revision}</span>
-                  )}
+          {shipped.length > 0 && (
+            <div className="mono text-[12.5px] text-zinc-500">
+              {shipped.length} deliverables / <span className="text-emerald-400">{money(state.revenue)}</span> collected
+            </div>
+          )}
+        </motion.div>
+        {shipped.length === 0 ? (
+          <div className="card-quiet flex h-44 items-center justify-center text-[13px] text-zinc-600">
+            Nothing shipped yet. Run a brief below.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+            {shipped.map((o, i) => (
+              <motion.button
+                key={o.id}
+                {...inView(i * 0.05)}
+                onClick={() => {
+                  setSelectedId(o.id)
+                  window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+                }}
+                className="hover-lift group relative overflow-hidden rounded-2xl border border-white/10 text-left"
+              >
+                {o.videoFile ? (
+                  <video src={o.videoFile} muted loop autoPlay playsInline className="aspect-[9/16] w-full object-cover" />
+                ) : (
+                  <img src={o.posterFile} alt={o.title} className="aspect-[9/16] w-full object-cover" />
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent p-3 pt-10">
+                  <div className="text-[12.5px] font-medium leading-tight">{o.title}</div>
+                  <div className="mono mt-1 flex items-center justify-between text-[11px] text-zinc-400">
+                    <span className="truncate pr-2">{o.client}</span>
+                    <span className="font-semibold text-emerald-400">{money(o.amountUsd)}</span>
+                  </div>
                 </div>
-                <h1 className="mt-1.5 text-2xl font-semibold tracking-tight">{selected.title}</h1>
-                <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-zinc-400">
-                  {selected.brief}
-                </p>
+              </motion.button>
+            ))}
+          </div>
+        )}
+      </section>
 
-                {/* stepper */}
-                <div className="mt-4 flex items-center gap-1.5">
-                  {STEPS.map((s, i) => {
-                    const on = selected ? s.reached(selected) : false
-                    return (
-                      <div key={s.key} className="flex items-center gap-1.5">
-                        {i > 0 && <div className={'h-px w-6 ' + (on ? 'bg-indigo-400/60' : 'bg-white/10')} />}
-                        <div
-                          className={
-                            'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ' +
-                            (on
-                              ? 'border-indigo-400/40 bg-indigo-500/10 text-indigo-200'
-                              : 'border-white/10 text-zinc-500')
-                          }
-                        >
-                          {s.label}
-                        </div>
+      {/* the loop */}
+      <section className="border-y border-white/5 bg-white/[0.015]">
+        <div className="mx-auto max-w-[1400px] px-6 py-14">
+          <motion.div {...inView()}>
+            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+              Cents explore. Dollars render. A human gates both.
+            </h2>
+            <p className="mt-1 max-w-[62ch] text-[13.5px] text-zinc-500">
+              The jury is the economic filter: pairwise Claude duels aggregated with Bradley-Terry,
+              the same mechanism that took rank 1 in Ethereum Foundation&apos;s Deep Funding contest.
+            </p>
+          </motion.div>
+          <motion.div {...inView(0.08)} className="mt-8 flex flex-wrap items-stretch gap-2">
+            {[
+              { icon: <Coins size={17} />, label: 'Brief escrowed', sub: 'client budget locked', human: false },
+              { icon: <FilmSlate size={17} />, label: '3 concepts', sub: '$0.02 total', human: false },
+              { icon: <Scales size={17} />, label: 'Jury duels', sub: '6 duels, $0.01', human: false },
+              { icon: <UserCircleCheck size={17} />, label: 'Greenlight', sub: 'human funds the render', human: true },
+              { icon: <FilmSlate size={17} />, label: 'Render + poster', sub: '$0.27, about 2 min', human: false },
+              { icon: <CheckCircle size={17} />, label: 'Accept', sub: 'human releases escrow, USDC settles', human: true },
+            ].map((s, i, arr) => (
+              <div key={s.label} className="flex items-center gap-2">
+                <div
+                  className={
+                    'flex min-w-[150px] flex-col gap-1 rounded-2xl border px-4 py-3 ' +
+                    (s.human ? 'border-emerald-400/40 bg-emerald-400/5' : 'border-white/8 bg-white/[0.02]')
+                  }
+                >
+                  <div className={'flex items-center gap-2 text-[13px] font-medium ' + (s.human ? 'text-emerald-300' : 'text-zinc-200')}>
+                    {s.icon} {s.label}
+                  </div>
+                  <div className="mono text-[11px] text-zinc-500">{s.sub}</div>
+                </div>
+                {i < arr.length - 1 && <ArrowRight size={14} className="shrink-0 text-zinc-700" />}
+              </div>
+            ))}
+          </motion.div>
+          <motion.div {...inView(0.14)} className="mono mt-8 flex flex-wrap gap-10 text-[13px]">
+            <div>
+              <div className="text-zinc-500">avg order</div>
+              <div className="mt-0.5 text-2xl font-semibold text-zinc-100">
+                {shipped.length ? money(state.revenue / shipped.length) : '--'}
+              </div>
+            </div>
+            <div>
+              <div className="text-zinc-500">avg cogs</div>
+              <div className="mt-0.5 text-2xl font-semibold text-zinc-100">
+                {shipped.length ? '$' + (cogsDelivered / shipped.length).toFixed(2) : '--'}
+              </div>
+            </div>
+            <div>
+              <div className="text-zinc-500">gross margin</div>
+              <div className="mt-0.5 text-2xl font-semibold text-emerald-400">
+                {grossMargin ? `${grossMargin}%` : '--'}
+              </div>
+            </div>
+            <div>
+              <div className="text-zinc-500">turnaround</div>
+              <div className="mt-0.5 text-2xl font-semibold text-zinc-100">same hour</div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* team */}
+      <section className="mx-auto max-w-[1400px] px-6 py-14">
+        <motion.div {...inView()}>
+          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Three directors and a jury</h2>
+          <p className="mt-1 text-[13.5px] text-zinc-500">
+            Distinct creative crafts compete on every brief. Reputation accrues per shipped order.
+          </p>
+        </motion.div>
+        <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {agents.map((a, i) => (
+            <motion.div key={a.id} {...inView(i * 0.06)} className="hover-lift overflow-hidden rounded-2xl border border-white/10">
+              <img src={PORTRAIT[a.id]} alt={`${a.name}, ${a.role}`} className="aspect-square w-full object-cover" />
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-[15px] font-semibold">{a.name}</div>
+                  <span
+                    className={
+                      'h-2 w-2 rounded-full ' + (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-emerald-400/80')
+                    }
+                  />
+                </div>
+                <div className="text-[12.5px] text-zinc-400">{a.role}</div>
+                <div className="mono mt-2 text-[11.5px] text-zinc-500">
+                  rep {a.reputation} / {a.delivered} shipped / ${a.feeUsd} per concept
+                </div>
+              </div>
+            </motion.div>
+          ))}
+          <motion.div {...inView(0.2)} className="flex flex-col justify-between rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-4">
+            <div>
+              <div className="flex items-center gap-2 text-[15px] font-semibold text-emerald-300">
+                <Scales size={17} /> The Jury
+              </div>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
+                Judge BRAND scores client fit. Judge SCROLL scores stopping power. Every pair of
+                concepts duels, Bradley-Terry aggregates the verdicts.
+              </p>
+            </div>
+            <div className="mono mt-3 text-[11.5px] text-zinc-500">
+              claude-sonnet-5 on the founder&apos;s own relay
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* operate */}
+      <section id="operate" className="border-y border-white/5 bg-white/[0.015]">
+        <div className="mx-auto max-w-[1400px] px-6 py-14">
+          <motion.div {...inView()}>
+            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Run the studio</h2>
+            <p className="mt-1 text-[13.5px] text-zinc-500">
+              Lock a brief into escrow, then make the two calls only a human makes here.
+            </p>
+          </motion.div>
+
+          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.45fr_1fr]">
+            {/* left: selected order operations */}
+            <div className="card p-5">
+              {!selected ? (
+                <div className="flex h-40 items-center justify-center text-[13px] text-zinc-600">
+                  Select an order to operate
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="mono text-[11.5px] text-zinc-500">
+                        {selected.client} / {selected.vertical} / <span className="text-zinc-300">{money(selected.amountUsd)} in escrow</span>
+                        {selected.revision > 0 && <span className="text-amber-400"> / rev {selected.revision}</span>}
                       </div>
-                    )
-                  })}
-                  <span className="ml-2 text-[11px] text-zinc-500">{STATUS_LABEL[selected.status]}</span>
-                </div>
-
-                {/* greenlight: concept picker */}
-                {selected.status === 'greenlight' && (
-                  <div className="mt-5">
-                    <div className="mb-2 text-[12px] font-medium uppercase tracking-wider text-zinc-400">
-                      Pick the concept to fund
-                      <span className="ml-2 normal-case text-zinc-500">
-                        concepts cost cents, renders cost dollars, you gate the spend
-                      </span>
+                      <div className="mt-1 text-[17px] font-semibold tracking-tight">{selected.title}</div>
                     </div>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <span
+                      className={
+                        'mono shrink-0 rounded-full border px-3 py-1 text-[11px] ' +
+                        (selected.status === 'greenlight' || selected.status === 'review'
+                          ? 'border-emerald-400/40 text-emerald-300'
+                          : selected.status === 'delivered'
+                            ? 'border-white/10 text-zinc-300'
+                            : 'border-amber-400/30 text-amber-300')
+                      }
+                    >
+                      {STATUS_LABEL[selected.status]}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-500">{selected.brief}</p>
+
+                  {/* greenlight picker */}
+                  {selected.status === 'greenlight' && (
+                    <div className="mt-4 space-y-2.5">
                       {selected.ranking.map((r, idx) => {
                         const d = selected.drafts.find((x) => x.agentId === r.agentId)!
                         const a = agentOf(r.agentId)!
                         return (
-                          <div key={r.agentId} className={'card hover-lift p-3.5 ' + (idx === 0 ? 'ring-1 ring-indigo-400/40' : '')}>
-                            <div className="flex items-center justify-between">
-                              <div className="text-[12px] text-zinc-400">
-                                {a.name} <span className="text-zinc-600">{a.role}</span>
+                          <div
+                            key={r.agentId}
+                            className={
+                              'rounded-2xl border p-4 ' +
+                              (idx === 0 ? 'border-emerald-400/40 bg-emerald-400/5' : 'border-white/8 bg-white/[0.02]')
+                            }
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="mono text-[11px] text-zinc-500">
+                                  {a.name} / jury strength {(r.score * 100).toFixed(0)}% / {r.wins} duel wins
+                                </div>
+                                <div className="mt-0.5 text-[15px] font-semibold">{d.concept.concept}</div>
+                                <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-400">{d.concept.hook}</p>
                               </div>
-                              {idx === 0 && (
-                                <span className="rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
-                                  Jury pick
-                                </span>
-                              )}
+                              <button
+                                onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId })}
+                                className={
+                                  'shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold ' +
+                                  (idx === 0 ? 'btn-primary' : 'btn-ghost')
+                                }
+                              >
+                                {idx === 0 ? 'Greenlight' : 'Fund this'}
+                              </button>
                             </div>
-                            <div className="mt-1 text-[15px] font-semibold">{d.concept.concept}</div>
-                            <p className="mt-1 line-clamp-3 text-[12px] leading-relaxed text-zinc-400">
-                              {d.concept.hook}
-                            </p>
-                            <div className="nums mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
-                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-[#635bff] to-[#9066ff]"
-                                  style={{ width: `${Math.max(6, r.score * 100)}%` }}
-                                />
-                              </div>
-                              {(r.score * 100).toFixed(0)}% / {r.wins}W
-                            </div>
-                            <button
-                              onClick={() =>
-                                post('/api/greenlight', { orderId: selected.id, agentId: r.agentId })
-                              }
-                              className={
-                                'mt-3 w-full rounded-lg px-3 py-2 text-[12px] font-medium ' +
-                                (idx === 0 ? 'btn-primary text-white' : 'btn-ghost text-zinc-200')
-                              }
-                            >
-                              {idx === 0 ? 'Greenlight jury pick' : 'Override and fund this'}
-                            </button>
                           </div>
                         )
                       })}
-                    </div>
-                  </div>
-                )}
-
-                {/* review: acceptance */}
-                {selected.status === 'review' && (
-                  <div className="mt-5 grid max-w-3xl grid-cols-1 gap-3 md:grid-cols-[1fr_260px]">
-                    <div className="card p-4">
-                      <div className="text-[12px] text-zinc-400">
-                        Winning concept by {agentOf(selected.winnerAgentId)?.name}
-                      </div>
-                      <div className="mt-0.5 text-[16px] font-semibold">
-                        {winnerDraft?.concept.concept}
-                      </div>
-                      <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">
-                        {winnerDraft?.concept.hook}
+                      <p className="mono pt-1 text-[11px] text-zinc-600">
+                        Concepts cost $0.03 so far. The render you fund costs about $0.27.
                       </p>
-                      <div className="mt-3 flex gap-2">
-                        <input
-                          placeholder="CEO notes: hook harder, warmer light, tighter ending"
-                          value={feedbackText}
-                          onChange={(e) => setFeedbackText(e.target.value)}
-                          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none placeholder:text-zinc-600 focus:border-indigo-400/50"
-                        />
-                        <button
-                          onClick={() => {
-                            post('/api/review', {
-                              orderId: selected.id,
-                              action: 'revise',
-                              feedback: feedbackText,
-                            })
-                            setFeedbackText('')
-                          }}
-                          className="btn-ghost rounded-lg px-3 py-2 text-[12px] font-medium text-zinc-200"
-                        >
-                          Send back
-                        </button>
-                      </div>
                     </div>
-                    <div className="card flex flex-col justify-between p-4">
-                      <div className="nums space-y-1.5 text-[12px]">
-                        <div className="flex justify-between text-zinc-400">
-                          <span>Price</span>
-                          <span className="text-zinc-100">{money(selected.amountUsd)}</span>
+                  )}
+
+                  {/* review actions */}
+                  {selected.status === 'review' && (
+                    <div className="mt-4">
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                        <div className="mono text-[11px] text-zinc-500">
+                          winning concept by {agentOf(selected.winnerAgentId)?.name}
                         </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span>COGS (est.)</span>
-                          <span className="text-zinc-100">${selected.cogsUsd.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between font-medium">
-                          <span className="text-zinc-300">Margin</span>
-                          <span className="text-emerald-400">
-                            {(((selected.amountUsd - selected.cogsUsd) / selected.amountUsd) * 100).toFixed(1)}%
+                        <div className="mt-0.5 text-[15px] font-semibold">{winnerDraft?.concept.concept}</div>
+                        <div className="mono mt-2 flex gap-6 text-[12px] text-zinc-400">
+                          <span>price <span className="text-zinc-100">{money(selected.amountUsd)}</span></span>
+                          <span>cogs <span className="text-zinc-100">${selected.cogsUsd.toFixed(2)}</span></span>
+                          <span>
+                            margin{' '}
+                            <span className="text-emerald-400">
+                              {(((selected.amountUsd - selected.cogsUsd) / selected.amountUsd) * 100).toFixed(1)}%
+                            </span>
                           </span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => post('/api/review', { orderId: selected.id, action: 'approve' })}
-                        className="btn-primary mt-3 w-full rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white"
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          onClick={() => post('/api/review', { orderId: selected.id, action: 'approve' })}
+                          className="btn-primary flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold"
+                        >
+                          <CheckCircle size={16} weight="bold" /> Accept and settle
+                        </button>
+                        <input
+                          aria-label="CEO revision notes"
+                          placeholder="Notes: hook harder, warmer light, tighter ending"
+                          value={feedbackText}
+                          onChange={(e) => setFeedbackText(e.target.value)}
+                          className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-[12.5px] outline-none placeholder:text-zinc-600 focus:border-emerald-400/50"
+                        />
+                        <button
+                          onClick={() => {
+                            post('/api/review', { orderId: selected.id, action: 'revise', feedback: feedbackText })
+                            setFeedbackText('')
+                          }}
+                          className="btn-ghost flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12.5px] font-medium"
+                        >
+                          <ArrowUUpLeft size={14} /> Send back
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* delivered invoice */}
+                  {selected.status === 'delivered' && selected.invoice && (
+                    <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="mono text-[12.5px] font-medium text-zinc-200">{selected.invoice.id}</div>
+                        <div className="mono text-[13px] font-semibold text-emerald-400">
+                          {money(selected.amountUsd)} settled
+                        </div>
+                      </div>
+                      <div className="mono mt-1.5 break-all text-[11px] text-zinc-600">
+                        {selected.invoice.ref.includes('https://') ? (
+                          <>
+                            {selected.invoice.ref.split('https://')[0]}
+                            <a
+                              href={'https://' + selected.invoice.ref.split('https://')[1]}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-400 underline decoration-emerald-400/40 hover:text-emerald-300"
+                            >
+                              View on BaseScan
+                            </a>
+                          </>
+                        ) : (
+                          selected.invoice.ref
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* jury detail */}
+                  {selected.duels.length > 0 && selected.status !== 'greenlight' && (
+                    <details className="mt-4">
+                      <summary className="cursor-pointer text-[12px] text-zinc-500 hover:text-zinc-300">
+                        Jury detail: {selected.duels.length} duels, Bradley-Terry aggregate
+                      </summary>
+                      <div className="mt-2 space-y-1.5 rounded-2xl border border-white/6 bg-white/[0.015] p-3.5">
+                        {selected.duels.map((d, i) => (
+                          <div key={i} className="text-[11.5px] leading-relaxed text-zinc-500">
+                            <span className="text-zinc-400">
+                              {agentOf(d.a)?.name} vs {agentOf(d.b)?.name}
+                            </span>{' '}
+                            / {d.judge} picked <span className="text-zinc-200">{agentOf(d.winner)?.name}</span>: {d.reason}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* right: intake + active */}
+            <div className="flex flex-col gap-4">
+              <div className="card p-5">
+                <div className="text-[14px] font-semibold">New brief</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {templates.map((t, i) => (
+                    <button
+                      key={i}
+                      onClick={() => post('/api/orders', { template: i })}
+                      className="btn-ghost rounded-full px-3.5 py-2 text-[12px]"
+                    >
+                      {t.client} <span className="mono text-zinc-500">{money(t.amountUsd)}</span>
+                    </button>
+                  ))}
+                  <button onClick={() => setShowCustom((v) => !v)} className="btn-ghost rounded-full px-3.5 py-2 text-[12px]">
+                    + custom
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPlaybookDraft(state.playbook)
+                      setShowPlaybook((v) => !v)
+                    }}
+                    className="btn-ghost rounded-full px-3.5 py-2 text-[12px]"
+                  >
+                    Playbook
+                  </button>
+                </div>
+
+                {showCustom && (
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="col-span-1">
+                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-client">Client</label>
+                      <input
+                        id="c-client"
+                        value={custom.client}
+                        onChange={(e) => setCustom({ ...custom, client: e.target.value })}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-vert">Vertical</label>
+                      <select
+                        id="c-vert"
+                        value={custom.vertical}
+                        onChange={(e) => setCustom({ ...custom, vertical: e.target.value })}
+                        className="w-full rounded-lg border border-white/10 bg-[#131316] px-3 py-2 text-[12.5px] text-zinc-200 outline-none focus:border-emerald-400/50"
                       >
-                        Accept and release escrow
+                        <option>product ad</option>
+                        <option>travel promo</option>
+                        <option>science explainer</option>
+                        <option>brand film</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-title">Order title</label>
+                      <input
+                        id="c-title"
+                        value={custom.title}
+                        onChange={(e) => setCustom({ ...custom, title: e.target.value })}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-brief">
+                        Brief: audience, feel, what to end on
+                      </label>
+                      <textarea
+                        id="c-brief"
+                        rows={3}
+                        value={custom.brief}
+                        onChange={(e) => setCustom({ ...custom, brief: e.target.value })}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-emerald-400/50"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-usd">Budget (USD)</label>
+                      <input
+                        id="c-usd"
+                        type="number"
+                        value={custom.amountUsd}
+                        onChange={(e) => setCustom({ ...custom, amountUsd: Number(e.target.value) })}
+                        className="mono w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                      />
+                    </div>
+                    <div className="col-span-1 flex items-end">
+                      <button
+                        onClick={() => {
+                          post('/api/orders', custom)
+                          setShowCustom(false)
+                        }}
+                        className="btn-primary w-full rounded-full px-4 py-2 text-[12.5px] font-semibold"
+                      >
+                        Lock escrow
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* delivered: invoice */}
-                {selected.status === 'delivered' && selected.invoice && (
-                  <div className="card mt-5 max-w-xl p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[13px] font-medium">{selected.invoice.id}</div>
-                      <div className="nums text-[13px] font-semibold text-emerald-400">
-                        {money(selected.amountUsd)} settled
-                      </div>
-                    </div>
-                    <div className="nums mt-1 text-[11px] text-zinc-500">
-                      COGS ${selected.cogsUsd.toFixed(2)} / margin{' '}
-                      {(((selected.amountUsd - selected.cogsUsd) / selected.amountUsd) * 100).toFixed(1)}% /{' '}
-                      {fmtTime(selected.invoice.paidAt)}
-                    </div>
-                    <div className="mt-1 break-all text-[11px] text-zinc-600">
-                      {selected.invoice.ref.includes('https://') ? (
-                        <>
-                          {selected.invoice.ref.split('https://')[0]}
-                          <a
-                            href={'https://' + selected.invoice.ref.split('https://')[1]}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-indigo-300 underline decoration-indigo-300/40 hover:text-indigo-200"
-                          >
-                            View on BaseScan
-                          </a>
-                        </>
-                      ) : (
-                        selected.invoice.ref
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* jury detail */}
-                {selected.duels.length > 0 && selected.status !== 'greenlight' && (
-                  <details className="mt-4 max-w-3xl">
-                    <summary className="cursor-pointer text-[12px] text-zinc-500 hover:text-zinc-300">
-                      Jury detail: {selected.duels.length} pairwise duels, Bradley-Terry aggregate
-                    </summary>
-                    <div className="card-quiet mt-2 space-y-1 p-3">
-                      {selected.ranking.map((r) => {
-                        const a = agentOf(r.agentId)
-                        return (
-                          <div key={r.agentId} className="nums flex items-center gap-2 text-[11px]">
-                            <span className="w-16 text-zinc-300">{a?.name}</span>
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                              <div
-                                className="h-full rounded-full bg-indigo-400/70"
-                                style={{ width: `${Math.max(5, r.score * 100)}%` }}
-                              />
-                            </div>
-                            <span className="w-16 text-right text-zinc-500">
-                              {(r.score * 100).toFixed(0)}% / {r.wins}W
-                            </span>
-                          </div>
-                        )
-                      })}
-                      <div className="pt-1.5">
-                        {selected.duels.map((d, i) => (
-                          <div key={i} className="text-[11px] leading-relaxed text-zinc-500">
-                            <span className="text-zinc-400">
-                              {agentOf(d.a)?.name} vs {agentOf(d.b)?.name}
-                            </span>{' '}
-                            / {d.judge} picked{' '}
-                            <span className="text-zinc-200">{agentOf(d.winner)?.name}</span>: {d.reason}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </details>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* order intake */}
-      <section className="mx-auto max-w-[1500px] px-6 py-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-[12px] font-medium uppercase tracking-wider text-zinc-500">
-            New brief
-          </span>
-          {templates.map((t, i) => (
-            <button
-              key={i}
-              onClick={() => post('/api/orders', { template: i })}
-              className="btn-ghost rounded-full px-3.5 py-1.5 text-[12px] text-zinc-200"
-            >
-              {t.client} <span className="text-zinc-500">{t.vertical}</span>{' '}
-              <span className="nums text-zinc-400">{money(t.amountUsd)}</span>
-            </button>
-          ))}
-          <button
-            onClick={() => setShowCustom((v) => !v)}
-            className="btn-ghost rounded-full px-3.5 py-1.5 text-[12px] text-zinc-300"
-          >
-            + custom
-          </button>
-          <button
-            onClick={() => {
-              setPlaybookDraft(state.playbook)
-              setShowPlaybook((v) => !v)
-            }}
-            className="btn-ghost rounded-full px-3.5 py-1.5 text-[12px] text-zinc-300"
-            title="The human experience layer: standing creative rules every agent obeys"
-          >
-            Playbook
-          </button>
-        </div>
-
-        {showCustom && (
-          <div className="card mt-3 flex flex-wrap items-end gap-2 p-3">
-            <input
-              placeholder="Client"
-              value={custom.client}
-              onChange={(e) => setCustom({ ...custom, client: e.target.value })}
-              className="w-36 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none placeholder:text-zinc-600 focus:border-indigo-400/50"
-            />
-            <select
-              value={custom.vertical}
-              onChange={(e) => setCustom({ ...custom, vertical: e.target.value })}
-              className="rounded-lg border border-white/10 bg-[#141417] px-2 py-2 text-[12px] text-zinc-200 outline-none"
-            >
-              <option>product ad</option>
-              <option>travel promo</option>
-              <option>science explainer</option>
-              <option>brand film</option>
-            </select>
-            <input
-              placeholder="Order title, e.g. 5s vertical bumper for ..."
-              value={custom.title}
-              onChange={(e) => setCustom({ ...custom, title: e.target.value })}
-              className="w-72 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none placeholder:text-zinc-600 focus:border-indigo-400/50"
-            />
-            <input
-              placeholder="Brief: audience, feel, what to end on"
-              value={custom.brief}
-              onChange={(e) => setCustom({ ...custom, brief: e.target.value })}
-              className="min-w-[260px] flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none placeholder:text-zinc-600 focus:border-indigo-400/50"
-            />
-            <input
-              type="number"
-              value={custom.amountUsd}
-              onChange={(e) => setCustom({ ...custom, amountUsd: Number(e.target.value) })}
-              className="nums w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none focus:border-indigo-400/50"
-            />
-            <button
-              onClick={() => {
-                post('/api/orders', custom)
-                setShowCustom(false)
-              }}
-              className="btn-primary rounded-lg px-4 py-2 text-[12px] font-semibold text-white"
-            >
-              Lock escrow
-            </button>
-          </div>
-        )}
-
-        {showPlaybook && (
-          <div className="card mt-3 p-3">
-            <div className="mb-1.5 text-[11px] uppercase tracking-wider text-zinc-500">
-              CEO Playbook: the human experience layer, injected into every agent prompt
-            </div>
-            <textarea
-              value={playbookDraft ?? state.playbook}
-              onChange={(e) => setPlaybookDraft(e.target.value)}
-              rows={6}
-              className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-[12px] leading-relaxed outline-none focus:border-indigo-400/50"
-            />
-            <button
-              onClick={() => {
-                post('/api/playbook', { playbook: playbookDraft })
-                setShowPlaybook(false)
-              }}
-              className="btn-primary mt-2 rounded-lg px-4 py-2 text-[12px] font-semibold text-white"
-            >
-              Save playbook
-            </button>
-          </div>
-        )}
-
-        {/* active pipeline ribbon */}
-        {active.length > 0 && (
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-            {active.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => setSelectedId(o.id)}
-                className={
-                  'card-quiet hover-lift shrink-0 px-3.5 py-2.5 text-left ' +
-                  (selectedId === o.id ? 'ring-1 ring-indigo-400/50' : '')
-                }
-              >
-                <div className="max-w-[220px] truncate text-[12px] font-medium">{o.title}</div>
-                <div className="nums mt-0.5 flex items-center gap-2 text-[11px] text-zinc-500">
-                  <span>{o.client}</span>
-                  <span>{money(o.amountUsd)}</span>
-                  <span
-                    className={
-                      o.status === 'greenlight'
-                        ? 'text-indigo-300'
-                        : o.status === 'review'
-                          ? 'text-emerald-300'
-                          : 'pulse-soft text-amber-300'
-                    }
-                  >
-                    {STATUS_LABEL[o.status]}
-                  </span>
-                </div>
-                {o.status === 'producing' && (
-                  <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#635bff] to-[#9066ff] transition-all"
-                      style={{ width: `${o.videoProgress ?? 2}%` }}
+                {showPlaybook && (
+                  <div className="mt-4">
+                    <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="pb">
+                      CEO Playbook, injected into every agent prompt
+                    </label>
+                    <textarea
+                      id="pb"
+                      value={playbookDraft ?? state.playbook}
+                      onChange={(e) => setPlaybookDraft(e.target.value)}
+                      rows={6}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-[12px] leading-relaxed outline-none focus:border-emerald-400/50"
                     />
+                    <button
+                      onClick={() => {
+                        post('/api/playbook', { playbook: playbookDraft })
+                        setShowPlaybook(false)
+                      }}
+                      className="btn-primary mt-2 rounded-full px-4 py-2 text-[12.5px] font-semibold"
+                    >
+                      Save playbook
+                    </button>
                   </div>
                 )}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
+              </div>
 
-      {/* showcase */}
-      <section className="mx-auto max-w-[1500px] px-6 py-5">
-        <div className="mb-3 flex items-baseline justify-between">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Shipped work</h2>
-            <p className="text-[12px] text-zinc-500">
-              Every card is a real render, accepted by a human, settled from escrow.
-            </p>
-          </div>
-          {shipped.length > 0 && (
-            <div className="nums text-[12px] text-zinc-500">
-              {shipped.length} deliverables / {money(state.revenue)} collected
-            </div>
-          )}
-        </div>
-        {shipped.length === 0 ? (
-          <div className="card-quiet flex h-40 items-center justify-center text-[13px] text-zinc-600">
-            Nothing shipped yet. Lock a brief above and run it through the studio.
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-            {shipped.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => {
-                  setSelectedId(o.id)
-                  window.scrollTo({ top: 0, behavior: 'smooth' })
-                }}
-                className="hover-lift group relative overflow-hidden rounded-xl border border-white/10 text-left"
-              >
-                {o.videoFile ? (
-                  <video
-                    src={o.videoFile}
-                    muted
-                    loop
-                    autoPlay
-                    playsInline
-                    className="aspect-[9/16] w-full object-cover"
-                  />
-                ) : (
-                  <img src={o.posterFile} alt="" className="aspect-[9/16] w-full object-cover" />
-                )}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-3 pt-8">
-                  <div className="text-[12px] font-medium leading-tight">{o.title}</div>
-                  <div className="nums mt-0.5 flex items-center justify-between text-[11px] text-zinc-400">
-                    <span>{o.client}</span>
-                    <span className="font-semibold text-emerald-400">{money(o.amountUsd)}</span>
+              {active.length > 0 && (
+                <div className="card p-5">
+                  <div className="text-[14px] font-semibold">In the pipeline</div>
+                  <div className="mt-3 space-y-2">
+                    {active.map((o) => (
+                      <button
+                        key={o.id}
+                        onClick={() => setSelectedId(o.id)}
+                        className={
+                          'w-full rounded-xl border p-3 text-left transition-colors ' +
+                          (selectedId === o.id
+                            ? 'border-emerald-400/40 bg-emerald-400/5'
+                            : 'border-white/8 bg-white/[0.02] hover:border-white/20')
+                        }
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[12.5px] font-medium">{o.title}</span>
+                          <span
+                            className={
+                              'mono shrink-0 text-[11px] ' +
+                              (o.status === 'greenlight' || o.status === 'review'
+                                ? 'text-emerald-300'
+                                : 'pulse-soft text-amber-300')
+                            }
+                          >
+                            {STATUS_LABEL[o.status]}
+                          </span>
+                        </div>
+                        <div className="mono mt-1 text-[11px] text-zinc-500">
+                          {o.client} / {money(o.amountUsd)}
+                        </div>
+                        {o.status === 'producing' && (
+                          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full bg-emerald-400 transition-all"
+                              style={{ width: `${o.videoProgress ?? 2}%` }}
+                            />
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                {o.posterFile && (
-                  <img
-                    src={o.posterFile}
-                    alt=""
-                    className="absolute right-2 top-2 w-10 rounded-md border border-white/20 opacity-90"
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* books: feed + team + P&L */}
-      <section className="mx-auto grid max-w-[1500px] grid-cols-1 gap-4 px-6 py-5 lg:grid-cols-[1.25fr_1fr]">
-        <div className="card flex h-[300px] flex-col p-4">
-          <div className="mb-2 text-[12px] font-medium uppercase tracking-wider text-zinc-500">
-            Studio activity
-          </div>
-          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-            {state.events.map((e, i) => (
-              <div key={i} className="flex gap-2 text-[12px] leading-snug">
-                <span className="nums shrink-0 text-zinc-600">{fmtTime(e.t)}</span>
-                <span className={'shrink-0 font-medium ' + (TAG_STYLE[e.tag] ?? 'text-zinc-300')}>
-                  {e.tag}
-                </span>
-                <span className={i === 0 ? 'text-zinc-200' : 'text-zinc-500'}>{e.text}</span>
-              </div>
-            ))}
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex flex-col gap-4">
-          <div className="card p-4">
-            <div className="mb-2 text-[12px] font-medium uppercase tracking-wider text-zinc-500">
-              The team
-            </div>
-            <div className="space-y-2.5">
-              {agents.map((a) => (
-                <div key={a.id} className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#635bff]/30 to-[#9066ff]/30 text-[11px] font-semibold text-indigo-200">
-                    {a.tag}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-medium">
-                      {a.name} <span className="font-normal text-zinc-500">{a.role}</span>
-                    </div>
-                    <div className="nums text-[11px] text-zinc-500">
-                      rep {a.reputation} / {a.delivered} shipped / ${a.feeUsd} per concept
-                    </div>
-                  </div>
-                  <span
-                    className={
-                      'h-2 w-2 rounded-full ' +
-                      (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-emerald-500/80')
-                    }
-                  />
+      </section>
+
+      {/* ledger */}
+      <section className="mx-auto max-w-[1400px] px-6 py-14">
+        <motion.div {...inView()}>
+          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">The ledger</h2>
+          <p className="mt-1 text-[13.5px] text-zinc-500">
+            Every event the company emits, and every invoice it settles.
+          </p>
+        </motion.div>
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.45fr_1fr]">
+          <div className="card flex h-[300px] flex-col p-4">
+            <div className="mono min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 text-[12px] leading-relaxed">
+              {state.events.map((e, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="shrink-0 text-zinc-600">{fmtTime(e.t)}</span>
+                  <span className={'shrink-0 font-medium ' + (TAG_STYLE[e.tag] ?? 'text-zinc-400')}>{e.tag}</span>
+                  <span className={i === 0 ? 'text-zinc-200' : 'text-zinc-500'}>{e.text}</span>
                 </div>
               ))}
-              <div className="flex items-center gap-3 border-t border-white/5 pt-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-[10px] font-semibold text-amber-200">
-                  JURY
-                </span>
-                <div className="text-[12px] text-zinc-400">
-                  Pairwise duels + Bradley-Terry, claude-sonnet-5 on the founder&apos;s own relay
-                </div>
-              </div>
+              {state.events.length === 0 && <div className="text-zinc-600">Quiet. Lock a brief to wake the studio.</div>}
             </div>
           </div>
           <div className="card p-4">
-            <div className="mb-2 text-[12px] font-medium uppercase tracking-wider text-zinc-500">
-              Unit economics
+            <div className="text-[14px] font-semibold">Invoices</div>
+            <div className="mt-3 space-y-2.5">
+              {shipped.slice(0, 5).map((o) => (
+                <div key={o.id} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="mono truncate text-[12px] text-zinc-300">
+                      {o.invoice?.id} / {o.client}
+                    </div>
+                    <div className="mono text-[11px] text-zinc-600">
+                      margin {(((o.amountUsd - o.cogsUsd) / o.amountUsd) * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="mono shrink-0 text-[12.5px] font-semibold text-emerald-400">{money(o.amountUsd)}</div>
+                </div>
+              ))}
+              {shipped.length === 0 && <div className="text-[12.5px] text-zinc-600">No invoices yet.</div>}
             </div>
-            <div className="nums grid grid-cols-3 gap-3 text-center">
-              <div>
-                <div className="text-[11px] text-zinc-500">Avg order</div>
-                <div className="text-[16px] font-semibold">
-                  {shipped.length ? money(state.revenue / shipped.length) : '--'}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] text-zinc-500">Avg COGS</div>
-                <div className="text-[16px] font-semibold">
-                  {shipped.length ? '$' + (cogsDelivered / shipped.length).toFixed(2) : '--'}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] text-zinc-500">Gross margin</div>
-                <div className="text-[16px] font-semibold text-emerald-400">
-                  {grossMargin ? `${grossMargin}%` : '--'}
-                </div>
-              </div>
-            </div>
-            <p className="mt-2.5 text-[11px] leading-relaxed text-zinc-600">
-              Concepts and jury cost cents, the render costs dollars, and the human gate sits exactly
-              where the money is spent and earned.
-            </p>
           </div>
         </div>
       </section>
 
-      <footer className="mx-auto flex max-w-[1500px] items-center justify-between px-6 pb-6 pt-2 text-[11px] text-zinc-600">
-        <span>
-          OPC formula: Human Experience (Playbook) + AI Loop (concepts, jury, render) + Human Review
-          (greenlight the spend, accept to release escrow)
-        </span>
-        <span>Jury mechanism: rank 1, GG24 Deep Funding L3 / BUIDL_OPC_Hackathon_SG 2026</span>
+      <footer className="border-t border-white/5">
+        <div className="mx-auto flex max-w-[1400px] flex-col items-start justify-between gap-2 px-6 py-6 text-[11.5px] text-zinc-600 md:flex-row md:items-center">
+          <span>
+            OPC formula, implemented: Human Experience is the Playbook, the AI Loop is concepts
+            plus jury plus render, Human Review gates the spend and releases escrow.
+          </span>
+          <span className="mono">BUIDL_OPC_Hackathon_SG / 2026-07-12</span>
+        </div>
       </footer>
     </div>
   )

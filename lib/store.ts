@@ -6,6 +6,7 @@ import { chatOpenAI, chatClaude, reliable, cacheKey } from './llm'
 import { generateVideo, VIDEO_MODEL_MINI } from './video'
 import { generateImage } from './image'
 import { chainEnabled, settleUsdc } from './chain'
+import { startEscrowWatch } from './escrowWatch'
 
 // ============================== types ==============================
 
@@ -86,9 +87,9 @@ export type State = {
 // ============================== company config ==============================
 
 export const COMPANY = {
-  name: 'SoloCorp Studio',
+  name: 'AAA Studio',
   ceo: 'alertcat',
-  vertical: 'one-person media production: ads, travel promos, explainers. Real footage, real invoices.',
+  vertical: 'Agents. Ads. Accepted. One-person media production: real footage, real invoices.',
 }
 
 // estimated unit costs, shown to make the margin story concrete
@@ -275,7 +276,7 @@ function agent(id: string) {
 // ============================== prompts ==============================
 
 function workerSystem(w: AgentDef, playbook: string) {
-  return `You are ${w.name}, ${w.role} at SoloCorp Studio, a one-person media production company where a human CEO directs AI creative agents. Your signature craft: ${w.style}.
+  return `You are ${w.name}, ${w.role} at AAA Studio, a one-person media production company where a human CEO directs AI creative agents. Your signature craft: ${w.style}.
 
 The CEO Playbook below is the human founder's creative quality bar. It overrides everything:
 ${playbook}
@@ -293,7 +294,7 @@ function orderUser(o: Order) {
 }
 
 function judgeSystem(j: { name: string; criterion: string }) {
-  return `You are ${j.name} on the creative jury of SoloCorp Studio. Two anonymous concepts (A and B) answer the same paid client brief. Your single criterion: ${j.criterion}.
+  return `You are ${j.name} on the creative jury of AAA Studio. Two anonymous concepts (A and B) answer the same paid client brief. Your single criterion: ${j.criterion}.
 
 Reply ONLY with minified JSON: {"winner":"A"|"B","reason":"one crisp sentence, max 18 words"}`
 }
@@ -716,6 +717,7 @@ export function resetCompany() {
 }
 
 export function publicState() {
+  startEscrowWatch(ev)
   return {
     company: COMPANY,
     state: S.state,
