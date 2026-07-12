@@ -1,18 +1,13 @@
 import type { Metadata } from 'next'
-import { DM_Sans, DM_Mono } from 'next/font/google'
+import { Inter } from 'next/font/google'
 import './globals.css'
 
-const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' })
-const dmMono = DM_Mono({
-  subsets: ['latin'],
-  weight: ['300', '400', '500'],
-  variable: '--font-dm-mono',
-})
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'SoloCorp OS, a one-person ad studio run by agents',
+  title: 'SoloCorp Studio, a one-person media company run by agents',
   description:
-    'Agents concept, a Claude jury ranks via pairwise duels and Bradley-Terry, Seedance renders real video, and the human CEO acceptance releases escrow. Built at BUIDL_OPC_Hackathon_SG 2026.',
+    'Agents concept, a Claude jury ranks concepts through pairwise duels and Bradley-Terry, Seedance renders real footage, gpt-image-2 ships the key visual, and the human CEO greenlights spend and releases escrow. Built at BUIDL_OPC_Hackathon_SG 2026.',
 }
 
 export default function RootLayout({
@@ -21,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${dmSans.variable} ${dmMono.variable}`}>
+    <html lang="en" className={inter.variable}>
       <body className="antialiased">{children}</body>
     </html>
   )

@@ -1,97 +1,104 @@
-# SoloCorp OS
+# SoloCorp Studio
 
-**1 human x 3 agents = an ad studio.**
-Agents concept, an AI jury ranks the concepts through pairwise duels, a video model renders the winning cut, and the human CEO's acceptance is the switch that releases payment. Real briefs in, real footage out, real invoices.
+**1 human x 3 agents = a media production company.**
+Director agents pitch concepts, a Claude jury ranks them through pairwise duels, the human CEO greenlights the spend, Seedance renders real footage, gpt-image-2 ships the key visual, and the CEO's final acceptance releases escrow, with USDC settlement on Base Sepolia.
 
-Built solo in one day at **BUIDL_OPC_Hackathon_SG** (Singapore, 2026-07-12).
+Built solo in one day at **BUIDL_OPC_Hackathon_SG** (Singapore, 2026-07-12). All code in this repo was written during the event (see commit history).
 
-## What problem this solves
+## The real problem
 
-A 5-second vertical bumper ad costs an SMB hundreds to thousands of dollars and days of agency turnaround. Text-to-video models made the render cheap, but a render button is not a business: clients need concept development, quality control, revisions, and a commercial loop where payment follows acceptance. That workflow layer is what a one-person studio actually sells. SoloCorp OS is that layer, run by agents, gated by a human.
+A 5-second vertical spot still costs an SMB hundreds to thousands of dollars and days of agency turnaround. Text-to-video collapsed the render cost, but a render button is not a business. Clients pay for concept development, taste, quality control, revisions, and a commercial loop where money moves on acceptance. That workflow layer is what a one-person studio actually sells. SoloCorp Studio is that layer, run by agents, gated by a human, in the three verticals its render infrastructure (RelayDance) already serves commercially: **product ads, travel promos, science explainers**.
 
-The deliverable is not a wall of text. It is a watchable, shippable video file.
+The deliverable is never a wall of text. It is a watchable cut plus a campaign key visual.
 
 ## The OPC formula, implemented literally
 
-The hackathon theme is `OPC = Human's Experience + AI's Loop + Human's Review`. Each term maps to a concrete mechanism:
+`OPC = Human's Experience + AI's Loop + Human's Review`
 
-| Theme term | Mechanism in SoloCorp OS |
+| Theme term | Mechanism |
 |---|---|
-| Human's Experience | The **CEO Playbook**: the founder's creative standards (hook in half a second, one idea per ad, end on the product), injected into every agent prompt. Edit it live and the whole studio changes behaviour. |
-| AI's Loop | Brief -> 3 director agents pitch concepts in parallel -> **AI jury runs pairwise duels, Bradley-Terry aggregates a ranking** -> winning concept goes to the render pipeline -> rejected cuts loop back with CEO notes. |
-| Human's Review | The **Acceptance Gate**. Client budget locks into escrow at order time; the CEO's click of Accept is what releases settlement. Human judgment is the payment switch, not a rubber stamp. |
+| Human's Experience | The **CEO Playbook**: the founder's creative standards, injected into every agent prompt. Edit it live, the whole studio changes. |
+| AI's Loop | Brief -> 3 directors pitch structured concepts -> **jury: pairwise duels + Bradley-Terry** -> render + poster in parallel -> revision loop on CEO notes. |
+| Human's Review | **Twice, where the money is.** Gate 1, Greenlight: concepts cost cents, renders cost dollars, the human approves the spend (and can override the jury). Gate 2, Acceptance: the human watches the actual cut, and accepting releases escrow as a real USDC transfer on Base Sepolia. |
 
 ## Why the jury matters
 
-Picking "the best" output with a single LLM call is vibes. SoloCorp OS ranks candidate concepts the way competition juries actually work:
-
-1. Every pair of concepts is compared head-to-head by independent Claude judges with different criteria (brand fit vs scroll-stopping power).
-2. Verdicts aggregate with **Bradley-Terry maximum likelihood** into a global ranking.
-
-This is the same mechanism the founder used to take **rank 1 on GG24 Deep Funding Level 3** (Ethereum Foundation / Gitcoin), where LLM jury pipelines were scored against hidden human jury ground truth. Here it has a second job: it spends cents on text duels so the studio never burns render dollars on a weak concept.
+Single-shot "rate this 1-10" scoring is vibes. SoloCorp ranks concepts the way real juries work: independent Claude judges compare every pair head-to-head on different criteria (client fit vs scroll-stopping power), and **Bradley-Terry MLE** aggregates the verdicts into a ranking. This exact mechanism took **rank 1 on GG24 Deep Funding Level 3** (Ethereum Foundation / Gitcoin), scored against hidden human jury ground truth. Here it doubles as the economic filter: cents of text duels protect dollars of render spend.
 
 ## Architecture
 
 ```
 client brief ($ locked in escrow)
-        |
-        v
-+- AI's Loop ------------------------------------------------+
-|  VT VOLT          SB SABLE          PX PIXEL               |
-|  hype director    cinematic         playful                |
-|      +--------- 3 concept pitches (JSON) ---------+        |
-|                                                   v        |
-|  jury: 3 pairwise duels x 2 Claude judges                  |
-|        -> Bradley-Terry MLE -> winning concept             |
-|                                                   v        |
-|  studio: Seedance 2.0 text-to-video render (5s, 9:16)      |
-+------------------------------+------------------------------+
-                               v
-              CEO Acceptance Gate (human review)
-              +- send back with notes -> revised concept, re-render
-              +- accept -> escrow released, invoice issued,
-                           treasury +$, agent reputation +
+   |
+   v
+3 director agents pitch concepts (JSON)     gpt-5.4-mini
+   HALE product storyteller / WANDER travel & lifestyle / SAGE explainer
+   |
+   v
+jury: 3 pairwise duels x 2 Claude judges    claude-sonnet-5 on the founder's own relay
+   -> Bradley-Terry ranking
+   |
+   v
+GATE 1: CEO greenlight (fund a concept, override allowed)
+   |
+   v
+production, in parallel:                    seedance 2.0 mini (5s, 9:16, ~120s)
+   video render + campaign poster           gpt-image-2 (~20s)
+   |
+   v
+GATE 2: CEO acceptance
+   -> send back with notes: revised concept, re-render
+   -> accept: escrow released, invoice issued,
+      USDC transfer on Base Sepolia (ethers v6), treasury +$
 ```
 
-- Directors: OpenAI `gpt-5.4-mini` (fast structured concepting)
-- Jury: `claude-sonnet-5`, served from the founder's own relay (relayrouter.io), OpenRouter fallback
-- Render: Seedance 2.0 via RelayDance (`doubao-seedance-2-0-fast`), 5s vertical, about 150s per cut
-- Resilience: every LLM and render output is disk-cached; if the venue network dies the pipeline replays at human pace instead of failing
-- Stack: Next.js 16 + React 19 + Tailwind 4, single process, no external services
+Resilience: every LLM, render and image output is disk-cached; if the venue network dies, the pipeline replays at human pace. Render prompts are constrained (no text, no logos, no likeness, no dialogue) and auto-retry once to dodge upstream content-filter false positives.
+
+Unit economics per order (shown live in the UI): concepts ~$0.02, jury ~$0.01, render ~$0.25, poster ~$0.02. Order prices $250-520. Gross margin above 99%.
 
 ## Run it
 
 ```bash
 npm install
 # .env.local:
-#   OPENAI_API_KEY=...
-#   RELAYROUTER_API_KEY=...     jury (claude-sonnet-5)
+#   OPENAI_API_KEY=...          directors
+#   RELAYROUTER_API_KEY=...     jury (claude-sonnet-5), founder's own relay
 #   OPENROUTER_API_KEY=...      jury fallback
-#   RELAYDANCE_API_KEY=...      video render
+#   RELAYDANCE_API_KEY=...      seedance render + gpt-image-2 poster
+#   CHAIN_BUYER_PK=...          optional: Base Sepolia settlement
+#   CHAIN_STUDIO_ADDR=...       optional: treasury address
 npm run dev
-# open http://localhost:3000, click a template brief, watch the studio work
+# open http://localhost:3000
 ```
 
 ## Demo script (2 minutes)
 
-1. Click **+ Kopi Loco $380**: the brief locks into escrow, three directors start concepting.
-2. Live feed: three concept pitches land, the jury convenes, duel verdicts stream in with one-line reasons, Bradley-Terry bars rank the concepts.
-3. Studio renders the winning concept into an actual 5-second vertical cut (progress bar live).
-4. The cut lands on the CEO Gate: watch it, type a note, hit Send back, and the director revises and re-renders. Or hit Accept.
-5. Accept releases escrow: invoice issued, treasury ticks up, the video joins the Shipped Reel.
+1. The Amber brand-film brief sits at **Greenlight**: three ranked concepts, jury bars, one click funds the winner (or override the jury).
+2. While it renders (live progress), walk the **Shipped work** wall: real cuts, real posters, prices and margins.
+3. The cut lands at the **Gate**: watch it, send back with one line of notes (revise + re-render), or accept.
+4. Accept releases escrow: invoice, treasury ticks, and a real USDC transfer confirms on BaseScan.
 
 ## Roadmap
 
-- Real settlement: x402 / USDC on Base. The founder's Port-USDC repo already implements on-chain agent payments; wiring it into the Acceptance Gate is integration, not invention.
-- Multi-shot ads: chain 2-3 renders with continuity frames for 15s spots, add `gpt-image-2` poster and thumbnail deliverables.
-- ASP listing: package the studio as an Agent Service Provider in A2A marketplaces (okx.ai-style escrow and acceptance flows map 1:1 to this design).
-- AWS deploy: Bedrock inference + S3 media + Lambda pipeline; the credits this hackathon awards are this product's COGS.
+- x402 protocol intake: charge for briefs over HTTP 402 with the official `@x402/next` middleware (facilitator already free on testnet).
+- Multi-shot spots: chain renders with continuity frames for 15-30s formats.
+- Game-asset vertical: gpt-image-2 texture and sprite packs with a three.js preview, same pipeline, new deliverable type.
+- ASP listing in A2A marketplaces (okx.ai-style escrow and acceptance map 1:1 to this design).
+- AWS deploy: Bedrock inference, S3 media, Lambda pipeline. The credits this hackathon awards are this product's COGS.
 
 ## Honest limitations
 
-- Settlement is simulated (deterministic reference, labelled as such in the UI); the on-chain path is roadmap.
-- Single continuous 5s shots only; multi-shot editing is not built yet.
-- Upstream audio content filter occasionally rejects a render; the pipeline auto-retries once and degrades to concept-only review if both attempts fail.
+- Single continuous 5s shots; multi-shot editing not built yet.
+- The three template orders settled with simulated references before the chain wallet was funded; live orders settle on-chain when `CHAIN_BUYER_PK` is funded (Circle faucet, Base Sepolia).
+- Upstream audio content filter occasionally rejects a render; auto-retry once, then degrade to concept-plus-poster review.
+
+## Attribution
+
+- Rendering: Seedance 2.0 mini and gpt-image-2 via [RelayDance](https://relaydance.com) (the founder's own relay service); jury inference via [RelayRouter](https://relayrouter.io) (same); concepts via OpenAI API.
+- Framework: Next.js 16, React 19, Tailwind CSS 4, ethers v6. UI written during the event.
+- Mechanism provenance: the pairwise-duel + Bradley-Terry jury design follows the founder's GG24 Deep Funding L3 winning pipeline (pre-event work used as inspiration only; all code here is fresh).
+- USDC test contract: Circle, Base Sepolia `0x036CbD53842c5426634e7929541eC2318f3dCF7e`.
+- Built with Claude Code as pair programmer (commits co-authored).
 
 ---
 

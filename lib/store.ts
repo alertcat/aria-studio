@@ -3,7 +3,9 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { bradleyTerry, type Comparison } from './bt'
 import { chatOpenAI, chatClaude, reliable, cacheKey } from './llm'
-import { generateVideo, VIDEO_MODEL_FAST } from './video'
+import { generateVideo, VIDEO_MODEL_MINI } from './video'
+import { generateImage } from './image'
+import { chainEnabled, settleUsdc } from './chain'
 
 // ============================== types ==============================
 
@@ -41,6 +43,7 @@ export type OrderStatus =
   | 'inbox'
   | 'concepting'
   | 'jury'
+  | 'greenlight'
   | 'producing'
   | 'review'
   | 'revising'
@@ -51,7 +54,9 @@ export type Order = {
   client: string
   title: string
   brief: string
+  vertical: string
   amountUsd: number
+  cogsUsd: number
   status: OrderStatus
   createdAt: number
   revision: number
@@ -62,6 +67,7 @@ export type Order = {
   videoFile?: string
   videoProgress?: number
   videoNote?: string
+  posterFile?: string
   feedback?: string
   invoice?: { id: string; paidAt: number; ref: string }
   error?: string
@@ -80,49 +86,58 @@ export type State = {
 // ============================== company config ==============================
 
 export const COMPANY = {
-  name: 'SoloCorp OS',
+  name: 'SoloCorp Studio',
   ceo: 'alertcat',
-  vertical: 'one-person ad studio: agents ship real video, human acceptance releases escrow',
+  vertical: 'one-person media production: ads, travel promos, explainers. Real footage, real invoices.',
 }
 
-const DEFAULT_PLAYBOOK = `1. First frame must hook in half a second. No slow fades, no logo intros.
-2. One idea per ad. If the concept needs a sentence of explanation, kill it.
+// estimated unit costs, shown to make the margin story concrete
+export const UNIT_COSTS = {
+  concepts: 0.02, // 3 director pitches, gpt-5.4-mini
+  jury: 0.01, // 6 pairwise duels, claude-sonnet-5 on own relay
+  render: 0.25, // seedance 2.0 mini, 5s 720p vertical
+  poster: 0.02, // gpt-image-2 campaign poster
+}
+
+const DEFAULT_PLAYBOOK = `1. First frame hooks in half a second. No slow fades, no logo intros.
+2. One idea per spot. If the concept needs a sentence of explanation, kill it.
 3. Native vertical 9:16, designed for sound-off viewing.
-4. Never render on-screen text, UI, logos or celebrity likeness in generated footage.
-5. End on the product hero shot. Brand recall beats cleverness.`
+4. Photorealistic commercial craft: real light, real materials, believable people. No neon gimmicks unless the brief asks.
+5. Never render on-screen text, UI, logos or celebrity likeness.
+6. End on the subject hero shot. Recall beats cleverness.`
 
 export const WORKERS: AgentDef[] = [
   {
-    id: 'volt',
-    tag: 'VT',
-    name: 'VOLT',
-    role: 'Hype Director',
+    id: 'hale',
+    tag: 'HL',
+    name: 'HALE',
+    role: 'Product Storyteller',
     style:
-      'kinetic high-energy social-native ads: whip pans, speed ramps, punchy cuts, bold saturated color, UGC adrenaline',
+      'benefit-led product commercials: studio-grade macro shots, controlled lighting, satisfying physical detail (pour, crack, texture), premium minimalism in the Apple and Nike tradition',
     feeUsd: 25,
     reputation: 10,
     delivered: 0,
     status: 'idle',
   },
   {
-    id: 'sable',
-    tag: 'SB',
-    name: 'SABLE',
-    role: 'Cinematic Director',
+    id: 'wander',
+    tag: 'WN',
+    name: 'WANDER',
+    role: 'Travel & Lifestyle Director',
     style:
-      'premium filmic ads: slow deliberate camera moves, dramatic rim light, macro textures, moody atmosphere, luxury restraint',
+      'warm documentary realism: golden hour, drone establishing moves, human moments in real places, National Geographic meets tourism-board campaign',
     feeUsd: 25,
     reputation: 10,
     delivered: 0,
     status: 'idle',
   },
   {
-    id: 'pixel',
-    tag: 'PX',
-    name: 'PIXEL',
-    role: 'Playful Director',
+    id: 'sage',
+    tag: 'SA',
+    name: 'SAGE',
+    role: 'Explainer Director',
     style:
-      'colorful quirky concepts: unexpected juxtapositions, toy-like miniature worlds, stop-motion energy, wit over polish',
+      'science and how-it-works visuals: macro and slow-motion physical phenomena, clean visual metaphors, crisp educational pacing in the Kurzgesagt and BBC Earth tradition, photorealistic not cartoon',
     feeUsd: 25,
     reputation: 10,
     delivered: 0,
@@ -135,7 +150,7 @@ export const JUDGES = [
     id: 'brand',
     name: 'Judge BRAND',
     criterion:
-      'brand fit and message clarity: does this concept sell the actual product on brief, will the client recognise their brand promise, is it feasible as a single 5 second generated shot',
+      'client fit and message clarity: does this concept deliver the brief and the brand promise, is it feasible as a single 5 second generated shot, would the paying client sign off',
   },
   {
     id: 'scroll',
@@ -148,24 +163,27 @@ export const JUDGES = [
 export const TEMPLATES = [
   {
     client: 'Kopi Loco',
+    vertical: 'product ad',
     title: '5s vertical bumper: cold brew can launch',
     brief:
       'Singapore cold brew brand launching a matte black can. Audience: 20-35 office crowd doomscrolling at 3pm. Feel: the exact moment cold caffeine hits. Premium but not corporate. End on the can.',
     amountUsd: 380,
   },
   {
-    client: 'NightRunner',
-    title: '5s hype bumper: midnight sneaker drop',
+    client: 'Visit Palawan',
+    vertical: 'travel promo',
+    title: '5s destination teaser: island lagoon',
     brief:
-      'Streetwear sneaker drop, neon-on-black city energy, reflective fabric catching light. Audience: sneakerheads on IG reels. Feel: adrenaline before the drop timer hits zero. End on the shoe.',
-    amountUsd: 420,
+      'Tourism board wants a scroll-stopper for the lagoon season. Audience: SEA city dwellers planning long weekends. Feel: the second you decide to book, turquoise water, limestone cliffs, one human moment. End wide on the lagoon.',
+    amountUsd: 450,
   },
   {
-    client: 'BUIDL OPC SG',
-    title: '5s teaser: hackathon aftermovie',
+    client: 'SlateLab',
+    vertical: 'science explainer',
+    title: '5s explainer hook: how lightning forms',
     brief:
-      'One-day AI hackathon in Singapore, 300 builders, terminal-green on black aesthetic, laptops, code, energy drinks, the 6pm submission rush. Feel: building the future in one room. End on a glowing screen.',
-    amountUsd: 250,
+      'Science channel needs a cold-open hook for a lightning episode. Audience: curious 16-30, sound off. Feel: awe plus one clear visual idea (charge building, then release). Photorealistic storm craft, not cartoon. End on the strike.',
+    amountUsd: 300,
   },
 ]
 
@@ -195,11 +213,11 @@ function createStore(): Store {
   }
   try {
     const disk = JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8'))
-    if (disk.schema === 2) {
+    if (disk.schema === 3) {
       store.state = { ...freshState(), ...disk.state }
       for (const o of store.state.orders) {
         if (['concepting', 'jury', 'producing', 'revising'].includes(o.status)) {
-          o.status = o.drafts?.length === 3 && o.ranking?.length ? 'review' : 'inbox'
+          o.status = o.drafts?.length === 3 && o.ranking?.length ? 'greenlight' : 'inbox'
         }
       }
       if (disk.agents) {
@@ -236,7 +254,7 @@ function saveSoon() {
       fs.mkdirSync(DATA_DIR, { recursive: true })
       fs.writeFileSync(
         STATE_PATH,
-        JSON.stringify({ schema: 2, state: S.state, agents: S.agents, seq: S.seq }, null, 1),
+        JSON.stringify({ schema: 3, state: S.state, agents: S.agents, seq: S.seq }, null, 1),
       )
     } catch (e) {
       console.error('[store] persist failed', e)
@@ -257,17 +275,17 @@ function agent(id: string) {
 // ============================== prompts ==============================
 
 function workerSystem(w: AgentDef, playbook: string) {
-  return `You are ${w.name}, ${w.role} at SoloCorp Studio, a one-person ad studio where a human CEO directs AI creative agents. Your signature style: ${w.style}.
+  return `You are ${w.name}, ${w.role} at SoloCorp Studio, a one-person media production company where a human CEO directs AI creative agents. Your signature craft: ${w.style}.
 
 The CEO Playbook below is the human founder's creative quality bar. It overrides everything:
 ${playbook}
 
-Task: produce ONE ad concept for the client brief. Reply ONLY with minified JSON, no markdown fences, exactly this shape:
-{"concept":"two word name","hook":"what stops the scroll in the first half second, one sentence","beats":["beat 1","beat 2","beat 3"],"style":"visual treatment in ten words","video_prompt":"60-100 word English prompt for a text-to-video model: one continuous shot, concrete subject and setting, explicit camera movement, lighting, mood, pacing, photorealistic detail. No on-screen text, no logos, no brand names, no watermarks."}`
+Task: produce ONE concept for the client brief. Reply ONLY with minified JSON, no markdown fences, exactly this shape:
+{"concept":"two word name","hook":"what stops the scroll in the first half second, one sentence","beats":["beat 1","beat 2","beat 3"],"style":"visual treatment in ten words","video_prompt":"60-100 word English prompt for a text-to-video model: one continuous photorealistic shot, concrete subject and setting, explicit camera movement, lighting, mood, pacing. No on-screen text, no logos, no brand names, no watermarks."}`
 }
 
 function orderUser(o: Order) {
-  let u = `Client: ${o.client}\nOrder: ${o.title}\nBudget: $${o.amountUsd}\nBrief: ${o.brief}`
+  let u = `Client: ${o.client}\nVertical: ${o.vertical}\nOrder: ${o.title}\nBudget: $${o.amountUsd}\nBrief: ${o.brief}`
   if (o.feedback && o.revision > 0) {
     u += `\n\nCEO REVISION FEEDBACK (rev ${o.revision}), address every point in a new concept JSON:\n${o.feedback}`
   }
@@ -275,13 +293,17 @@ function orderUser(o: Order) {
 }
 
 function judgeSystem(j: { name: string; criterion: string }) {
-  return `You are ${j.name} on the creative jury of SoloCorp Studio. Two anonymous ad concepts (A and B) answer the same paid client brief. Your single criterion: ${j.criterion}.
+  return `You are ${j.name} on the creative jury of SoloCorp Studio. Two anonymous concepts (A and B) answer the same paid client brief. Your single criterion: ${j.criterion}.
 
 Reply ONLY with minified JSON: {"winner":"A"|"B","reason":"one crisp sentence, max 18 words"}`
 }
 
 function duelUser(o: Order, a: Draft, b: Draft) {
   return `Brief: ${o.title}. ${o.brief.slice(0, 400)}\n\n--- CONCEPT A ---\n${JSON.stringify(a.concept, null, 1)}\n\n--- CONCEPT B ---\n${JSON.stringify(b.concept, null, 1)}`
+}
+
+function posterPrompt(o: Order, c: Concept) {
+  return `Premium campaign key visual for a ${o.vertical}: ${c.hook} Visual treatment: ${c.style}. Cinematic lighting, photorealistic, clean composition with generous negative space, no text, no words, no logos, no watermark.`
 }
 
 // ============================== parsing & fallbacks ==============================
@@ -295,7 +317,9 @@ function parseConcept(raw: string, w: AgentDef, o: Order): Concept {
         return {
           concept: String(p.concept || 'untitled').slice(0, 60),
           hook: String(p.hook || '').slice(0, 200),
-          beats: Array.isArray(p.beats) ? p.beats.map((b: unknown) => String(b).slice(0, 140)).slice(0, 4) : [],
+          beats: Array.isArray(p.beats)
+            ? p.beats.map((b: unknown) => String(b).slice(0, 140)).slice(0, 4)
+            : [],
           style: String(p.style || '').slice(0, 120),
           video_prompt: String(p.video_prompt).slice(0, 900),
         }
@@ -310,10 +334,10 @@ function parseConcept(raw: string, w: AgentDef, o: Order): Concept {
 function fallbackConcept(w: AgentDef, o: Order): Concept {
   return {
     concept: `${w.name} fallback`,
-    hook: 'Product macro with dramatic light, offline fallback concept.',
-    beats: ['macro texture reveal', 'slow orbital move', 'hero shot'],
+    hook: 'Hero subject in dramatic natural light, offline fallback concept.',
+    beats: ['texture reveal', 'slow camera move', 'hero shot'],
     style: w.style.split(':')[0],
-    video_prompt: `Macro product shot related to: ${o.title}. Dramatic rim lighting, slow orbital camera move, premium commercial aesthetic, shallow depth of field, photorealistic, moody atmosphere, single continuous shot.`,
+    video_prompt: `Photorealistic commercial shot related to: ${o.title}. Natural dramatic lighting, slow deliberate camera move, premium production craft, shallow depth of field, single continuous shot.`,
   }
 }
 
@@ -349,7 +373,8 @@ async function conceptOne(o: Order, w: AgentDef): Promise<Draft> {
   const key = cacheKey('concept', o.title, w.id, o.revision)
   const { content, cached } = await reliable(
     key,
-    () => chatOpenAI({ system: workerSystem(w, S.state.playbook), user: orderUser(o), maxTokens: 2200 }),
+    () =>
+      chatOpenAI({ system: workerSystem(w, S.state.playbook), user: orderUser(o), maxTokens: 2200 }),
     () => JSON.stringify(fallbackConcept(w, o)),
   )
   await pace(cached, 2000, 3500)
@@ -417,14 +442,30 @@ async function runJury(o: Order) {
     }))
     .sort((x, y) => y.score - x.score)
 
-  o.winnerAgentId = o.ranking[0].agentId
-  agent(o.winnerAgentId).reputation += 2
+  o.cogsUsd += UNIT_COSTS.concepts + UNIT_COSTS.jury
+  o.status = 'greenlight'
   ev(
     'RANK',
-    `Bradley-Terry verdict: ${agent(o.winnerAgentId).name} wins with ${(o.ranking[0].score * 100).toFixed(0)}% strength, concept goes to production`,
+    `Bradley-Terry ranking in: ${agent(o.ranking[0].agentId).name} leads at ${(o.ranking[0].score * 100).toFixed(0)}%. Awaiting CEO greenlight before render spend`,
     o.id,
   )
   saveSoon()
+}
+
+export function greenlightOrder(orderId: string, agentId?: string) {
+  const o = S.state.orders.find((x) => x.id === orderId)
+  if (!o || o.status !== 'greenlight') return
+  const pick = agentId && o.drafts.some((d) => d.agentId === agentId) ? agentId : o.ranking[0].agentId
+  o.winnerAgentId = pick
+  agent(pick).reputation += 2
+  const overrode = pick !== o.ranking[0].agentId
+  ev(
+    'GLGHT',
+    `CEO greenlit ${agent(pick).name}${overrode ? ' (overriding the jury pick)' : ''}, "${o.drafts.find((d) => d.agentId === pick)!.concept.concept}" goes to production`,
+    o.id,
+  )
+  saveSoon()
+  void runProduction(o)
 }
 
 async function runProduction(o: Order) {
@@ -432,34 +473,52 @@ async function runProduction(o: Order) {
   o.status = 'producing'
   o.videoProgress = 0
   o.videoNote = undefined
-  ev('PROD', `Studio rendering "${winner.concept.concept}" (Seedance 2.0, 5s vertical)`, o.id)
+  ev('PROD', `Studio rendering "${winner.concept.concept}" (Seedance 2.0 mini, 5s vertical) plus campaign poster (gpt-image-2)`, o.id)
   saveSoon()
 
   const vKey = cacheKey('video', o.title, o.winnerAgentId ?? '', o.revision)
-  const fileName = `${o.id}_r${o.revision}.mp4`
-  const absPath = path.join(MEDIA_DIR, fileName)
+  const pKey = cacheKey('poster', o.title, o.winnerAgentId ?? '', o.revision)
+  const videoName = `${o.id}_r${o.revision}.mp4`
+  const posterName = `${o.id}_r${o.revision}.png`
 
-  // cache replay: same title + winner + revision already rendered on disk
-  const { cachedVideoFile } = readVideoCache(vKey)
-  if (cachedVideoFile && fs.existsSync(path.join(MEDIA_DIR, cachedVideoFile))) {
-    for (const p of [12, 34, 58, 79, 96]) {
-      o.videoProgress = p
+  const posterTask = (async () => {
+    const { cachedVideoFile: cachedPoster } = readMediaCache(pKey)
+    if (cachedPoster && fs.existsSync(path.join(MEDIA_DIR, cachedPoster))) {
+      await sleep(2500 + Math.random() * 2000)
+      o.posterFile = `/media/${cachedPoster}`
+      ev('IMG', `Campaign poster ready`, o.id)
       saveSoon()
-      await sleep(1200 + Math.random() * 900)
+      return
     }
-    o.videoFile = `/media/${cachedVideoFile}`
-    o.videoProgress = 100
-    o.status = 'review'
-    ev('GATE', `Render complete, cut is on the CEO desk for acceptance`, o.id)
+    try {
+      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName))
+      o.posterFile = `/media/${posterName}`
+      o.cogsUsd += UNIT_COSTS.poster
+      writeMediaCache(pKey, posterName)
+      ev('IMG', `Campaign poster ready (gpt-image-2)`, o.id)
+    } catch (e) {
+      console.error('[image] poster failed:', (e as Error).message)
+      ev('ERR', `Poster generation failed, continuing with video only`, o.id)
+    }
     saveSoon()
-    return
-  }
+  })()
 
-  try {
+  const videoTask = (async () => {
+    const { cachedVideoFile } = readMediaCache(vKey)
+    if (cachedVideoFile && fs.existsSync(path.join(MEDIA_DIR, cachedVideoFile))) {
+      for (const p of [14, 37, 61, 82, 97]) {
+        o.videoProgress = p
+        saveSoon()
+        await sleep(1100 + Math.random() * 800)
+      }
+      o.videoFile = `/media/${cachedVideoFile}`
+      o.videoProgress = 100
+      return
+    }
     let lastLogged = -20
     await generateVideo(
       winner.concept.video_prompt,
-      absPath,
+      path.join(MEDIA_DIR, videoName),
       (pct) => {
         o.videoProgress = pct
         if (pct - lastLogged >= 20 && pct < 100) {
@@ -468,26 +527,31 @@ async function runProduction(o: Order) {
         }
         saveSoon()
       },
-      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_FAST, maxWaitS: 420 },
+      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_MINI, maxWaitS: 420 },
     )
-    o.videoFile = `/media/${fileName}`
+    o.videoFile = `/media/${videoName}`
     o.videoProgress = 100
-    writeVideoCache(vKey, fileName)
+    o.cogsUsd += UNIT_COSTS.render
+    writeMediaCache(vKey, videoName)
+  })()
+
+  try {
+    await Promise.all([videoTask, posterTask])
     o.status = 'review'
-    ev('GATE', `Render complete, cut is on the CEO desk for acceptance`, o.id)
+    ev('GATE', `Cut and key visual are on the CEO desk for final acceptance`, o.id)
   } catch (e) {
     console.error('[video] render failed:', (e as Error).message)
-    o.videoNote = `Render failed (${(e as Error).message.slice(0, 80)}). Concept and storyboard ready for review.`
+    o.videoNote = `Render failed (${(e as Error).message.slice(0, 80)}). Concept and poster ready for review.`
     o.videoProgress = undefined
     o.status = 'review'
-    ev('ERR', `Render failed for "${o.title}", concept sent to gate without footage`, o.id)
+    ev('ERR', `Render failed for "${o.title}", sent to gate without footage`, o.id)
   }
   saveSoon()
 }
 
-// video cache index lives inside data/video-cache.json
+// media cache index lives inside data/video-cache.json
 const VIDEO_CACHE_PATH = path.join(DATA_DIR, 'video-cache.json')
-function readVideoCache(key: string): { cachedVideoFile?: string } {
+function readMediaCache(key: string): { cachedVideoFile?: string } {
   try {
     const idx = JSON.parse(fs.readFileSync(VIDEO_CACHE_PATH, 'utf-8'))
     return { cachedVideoFile: idx[key] }
@@ -495,7 +559,7 @@ function readVideoCache(key: string): { cachedVideoFile?: string } {
     return {}
   }
 }
-function writeVideoCache(key: string, fileName: string) {
+function writeMediaCache(key: string, fileName: string) {
   let idx: Record<string, string> = {}
   try {
     idx = JSON.parse(fs.readFileSync(VIDEO_CACHE_PATH, 'utf-8'))
@@ -520,10 +584,9 @@ export async function runPipeline(orderId: string) {
     saveSoon()
     o.drafts = await Promise.all(WORKERS.map((w) => conceptOne(o, agent(w.id))))
     await runJury(o)
-    await runProduction(o)
   } catch (e) {
     o.error = (e as Error).message
-    o.status = o.drafts?.length === 3 ? 'review' : 'inbox'
+    o.status = o.drafts?.length === 3 ? 'greenlight' : 'inbox'
     ev('ERR', `Pipeline error on "${o.title}": ${o.error?.slice(0, 120)}`, o.id)
     saveSoon()
   }
@@ -559,6 +622,7 @@ export async function runRevision(orderId: string, feedback: string) {
     prev.concept = parseConcept(content, w, o)
     prev.revised = true
     prev.cached = cached
+    o.cogsUsd += UNIT_COSTS.concepts / 3
     ev(w.tag, `${w.name} delivered revised concept "${prev.concept.concept}", re-rendering`, o.id)
     saveSoon()
     await runProduction(o)
@@ -580,7 +644,23 @@ export function approveOrder(orderId: string) {
   o.invoice = {
     id: `INV-2026-${String(seq).padStart(4, '0')}`,
     paidAt: Date.now(),
-    ref: `0x${hash.slice(0, 40)} (Base Sepolia, simulated x402 settlement)`,
+    ref: chainEnabled()
+      ? 'Settling USDC on Base Sepolia...'
+      : `0x${hash.slice(0, 40)} (Base Sepolia, simulated settlement)`,
+  }
+  if (chainEnabled()) {
+    void (async () => {
+      try {
+        const r = await settleUsdc(o.amountUsd)
+        if (o.invoice) o.invoice.ref = `${r.usdc} USDC on Base Sepolia: ${r.url}`
+        ev('CHAIN', `On-chain settlement confirmed: ${r.usdc} USDC, tx ${r.hash.slice(0, 14)}...`, o.id)
+      } catch (e) {
+        if (o.invoice)
+          o.invoice.ref = `0x${hash.slice(0, 40)} (Base Sepolia, simulated settlement; live tx failed: ${(e as Error).message.slice(0, 60)})`
+        ev('ERR', `On-chain settlement failed, kept simulated record`, o.id)
+      }
+      saveSoon()
+    })()
   }
   o.status = 'delivered'
   S.state.revenue += o.amountUsd
@@ -590,7 +670,12 @@ export function approveOrder(orderId: string) {
     w.delivered += 1
     w.reputation += 3
   }
-  ev('PAID', `CEO accepted "${o.title}". Escrow released, treasury +$${o.amountUsd}, ${o.invoice.id} sent to ${o.client}`, o.id)
+  const margin = o.amountUsd > 0 ? (((o.amountUsd - o.cogsUsd) / o.amountUsd) * 100).toFixed(1) : '0'
+  ev(
+    'PAID',
+    `CEO accepted "${o.title}". Escrow released: +$${o.amountUsd}, COGS $${o.cogsUsd.toFixed(2)}, margin ${margin}%. ${o.invoice.id} sent to ${o.client}`,
+    o.id,
+  )
   saveSoon()
 }
 
@@ -599,13 +684,16 @@ export function createOrder(input: {
   title: string
   brief: string
   amountUsd: number
+  vertical?: string
 }): Order {
   const o: Order = {
     id: `ord_${S.seq++}_${Date.now().toString(36)}`,
     client: input.client.slice(0, 60) || 'Client',
     title: input.title.slice(0, 120) || 'Untitled order',
     brief: input.brief.slice(0, 2000),
+    vertical: (input.vertical || 'custom').slice(0, 40),
     amountUsd: Math.max(1, Math.min(100000, Math.round(input.amountUsd || 100))),
+    cogsUsd: 0,
     status: 'inbox',
     createdAt: Date.now(),
     revision: 0,
@@ -614,7 +702,7 @@ export function createOrder(input: {
     ranking: [],
   }
   S.state.orders.unshift(o)
-  ev('ESCROW', `New brief from ${o.client}: "${o.title}", $${o.amountUsd} locked in escrow`, o.id)
+  ev('ESCROW', `New brief from ${o.client} (${o.vertical}): "${o.title}", $${o.amountUsd} locked in escrow`, o.id)
   saveSoon()
   return o
 }
@@ -634,5 +722,6 @@ export function publicState() {
     agents: S.agents,
     judges: JUDGES.map((j) => j.name),
     templates: TEMPLATES,
+    unitCosts: UNIT_COSTS,
   }
 }

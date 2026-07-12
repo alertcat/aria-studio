@@ -6,6 +6,7 @@ import path from 'node:path'
 
 const RD_BASE = 'https://relaydance.com'
 export const VIDEO_MODEL_FAST = 'doubao-seedance-2-0-fast-260128'
+export const VIDEO_MODEL_MINI = 'doubao-seedance-2-0-mini-720p'
 export const VIDEO_MODEL_HQ = 'doubao-seedance-2-0-720p'
 
 function key() {
