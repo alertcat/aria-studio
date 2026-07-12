@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, useReducedMotion, useMotionValue, useTransform, animate, AnimatePresence } from 'motion/react'
@@ -102,6 +102,8 @@ const PORTRAIT: Record<string, string> = {
   sage: '/media/team-sage.png',
 }
 
+const READONLY = process.env.NEXT_PUBLIC_READONLY === '1'
+
 function fmtTime(t: number) {
   return new Date(t).toLocaleTimeString('en-GB', { hour12: false })
 }
@@ -144,7 +146,7 @@ export default function Page() {
 
   const poll = useCallback(async () => {
     try {
-      const res = await fetch('/api/state', { cache: 'no-store' })
+      const res = await fetch(READONLY ? '/demo-state.json' : '/api/state', { cache: 'no-store' })
       const json: ApiState = await res.json()
       setData(json)
       if (!selectedRef.current && json.state.orders.length > 0) {
@@ -160,11 +162,13 @@ export default function Page() {
 
   useEffect(() => {
     poll()
+    if (READONLY) return
     const id = setInterval(poll, 1200)
     return () => clearInterval(id)
   }, [poll])
 
   const post = async (url: string, body?: unknown) => {
+    if (READONLY) return
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -217,8 +221,8 @@ export default function Page() {
         <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <span className="h-3 w-3 rounded-[4px] bg-emerald-400" />
-            <span className="text-[16px] font-semibold tracking-tight">AAA Studio</span>
-            <span className="mono hidden text-[11px] text-zinc-600 sm:inline">Agents. Ads. Accepted.</span>
+            <span className="text-[16px] font-semibold tracking-tight">Aria Studio</span>
+            <span className="mono hidden text-[11px] text-zinc-600 sm:inline">a solo performance</span>
           </div>
           <div className="mono flex items-center gap-5 text-[13px]">
             <span className="text-zinc-500">
@@ -243,7 +247,7 @@ export default function Page() {
           <div>
             <motion.h1
               {...enter(0)}
-              className="text-5xl font-semibold tracking-tighter leading-none md:text-6xl"
+              className="text-6xl font-semibold tracking-tighter leading-[0.98] md:text-7xl xl:text-8xl"
             >
               Agents ship footage.
             </motion.h1>
@@ -357,7 +361,7 @@ export default function Page() {
       </header>
 
       {/* showcase */}
-      <section id="showcase" className="mx-auto max-w-[1400px] px-6 py-14">
+      <section id="showcase" className="mx-auto max-w-[1400px] px-6 py-20">
         <motion.div {...inView()} className="mb-5 flex items-end justify-between">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Shipped work</h2>
@@ -407,7 +411,7 @@ export default function Page() {
 
       {/* the loop */}
       <section className="border-y border-white/5 bg-white/[0.015]">
-        <div className="mx-auto max-w-[1400px] px-6 py-14">
+        <div className="mx-auto max-w-[1400px] px-6 py-20">
           <motion.div {...inView()}>
             <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
               Cents explore. Dollars render. A human gates both.
@@ -429,10 +433,13 @@ export default function Page() {
               <div key={s.label} className="flex items-center gap-2">
                 <div
                   className={
-                    'flex min-w-[150px] flex-col gap-1 rounded-2xl border px-4 py-3 ' +
+                    'relative flex min-w-[150px] flex-col gap-1 overflow-hidden rounded-2xl border px-4 py-3 ' +
                     (s.human ? 'border-emerald-400/40 bg-emerald-400/5' : 'border-white/8 bg-white/[0.02]')
                   }
                 >
+                  <span className="mono pointer-events-none absolute -right-1 -top-2 text-[34px] font-semibold leading-none text-white/[0.06]">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
                   <div className={'flex items-center gap-2 text-[13px] font-medium ' + (s.human ? 'text-emerald-300' : 'text-zinc-200')}>
                     {s.icon} {s.label}
                   </div>
@@ -470,7 +477,7 @@ export default function Page() {
       </section>
 
       {/* team */}
-      <section className="mx-auto max-w-[1400px] px-6 py-14">
+      <section className="mx-auto max-w-[1400px] px-6 py-20">
         <motion.div {...inView()}>
           <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Three directors and a jury</h2>
           <p className="mt-1 text-[13.5px] text-zinc-500">
@@ -516,7 +523,7 @@ export default function Page() {
 
       {/* operate */}
       <section id="operate" className="border-y border-white/5 bg-white/[0.015]">
-        <div className="mx-auto max-w-[1400px] px-6 py-14">
+        <div className="mx-auto max-w-[1400px] px-6 py-20">
           <motion.div {...inView()}>
             <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Run the studio</h2>
             <p className="mt-1 text-[13.5px] text-zinc-500">
@@ -578,15 +585,17 @@ export default function Page() {
                                 <div className="mt-0.5 text-[15px] font-semibold">{d.concept.concept}</div>
                                 <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-400">{d.concept.hook}</p>
                               </div>
-                              <button
-                                onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId })}
-                                className={
-                                  'shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold ' +
-                                  (idx === 0 ? 'btn-primary' : 'btn-ghost')
-                                }
-                              >
-                                {idx === 0 ? 'Greenlight' : 'Fund this'}
-                              </button>
+                              {!READONLY && (
+                                <button
+                                  onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId })}
+                                  className={
+                                    'shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold ' +
+                                    (idx === 0 ? 'btn-primary' : 'btn-ghost')
+                                  }
+                                >
+                                  {idx === 0 ? 'Greenlight' : 'Fund this'}
+                                </button>
+                              )}
                             </div>
                           </div>
                         )
@@ -616,6 +625,7 @@ export default function Page() {
                           </span>
                         </div>
                       </div>
+                      {!READONLY && (
                       <div className="mt-3 flex items-center gap-2">
                         <button
                           onClick={() => post('/api/review', { orderId: selected.id, action: 'approve' })}
@@ -640,6 +650,7 @@ export default function Page() {
                           <ArrowUUpLeft size={14} /> Send back
                         </button>
                       </div>
+                      )}
                     </div>
                   )}
 
@@ -696,6 +707,24 @@ export default function Page() {
 
             {/* right: intake + active */}
             <div className="flex flex-col gap-4">
+              {READONLY ? (
+                <div className="card p-5">
+                  <div className="text-[14px] font-semibold">Hosted showcase</div>
+                  <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-500">
+                    This page is a read-only snapshot of a real production day. The live pipeline
+                    (director agents, jury duels, Seedance renders, on-chain settlement) runs on the
+                    founder&apos;s machine during the demo.
+                  </p>
+                  <a
+                    href="https://github.com/alertcat/aria-studio"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-ghost mt-3 inline-block rounded-full px-4 py-2 text-[12px] font-medium"
+                  >
+                    View source on GitHub
+                  </a>
+                </div>
+              ) : (
               <div className="card p-5">
                 <div className="text-[14px] font-semibold">New brief</div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -816,6 +845,7 @@ export default function Page() {
                   </div>
                 )}
               </div>
+              )}
 
               {active.length > 0 && (
                 <div className="card p-5">
@@ -867,7 +897,7 @@ export default function Page() {
       </section>
 
       {/* ledger */}
-      <section className="mx-auto max-w-[1400px] px-6 py-14">
+      <section className="mx-auto max-w-[1400px] px-6 py-20">
         <motion.div {...inView()}>
           <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">The ledger</h2>
           <p className="mt-1 text-[13.5px] text-zinc-500">

@@ -1,10 +1,10 @@
-﻿# AAA Studio, pitch reference
+﻿# Aria Studio, pitch reference
 
 ## 30-second booth pitch (Top 30 screening)
 
 > Everyone here built agents that write text. My agents ship footage, and my clicks move the money.
 >
-> AAA Studio is a one-person media company: product ads, travel promos, science explainers. A brief locks budget into escrow. Three director agents pitch concepts. A Claude jury ranks them with pairwise duels and Bradley-Terry, the mechanism that won me rank 1 in Ethereum Foundation's Deep Funding contest. Then comes the point: **concepts cost cents, renders cost dollars, so I greenlight the spend.** Seedance renders the cut, gpt-image-2 ships the key visual, and when I accept, escrow releases as a real USDC transfer on Base Sepolia.
+> Aria Studio is a one-person media company: product ads, travel promos, science explainers. A brief locks budget into escrow. Three director agents pitch concepts. A Claude jury ranks them with pairwise duels and Bradley-Terry, the mechanism that won me rank 1 in Ethereum Foundation's Deep Funding contest. Then comes the point: **concepts cost cents, renders cost dollars, so I greenlight the spend.** Seedance renders the cut, gpt-image-2 ships the key visual, and when I accept, escrow releases as a real USDC transfer on Base Sepolia.
 >
 > [Point at the Shipped wall.] These were briefs this afternoon. Real cuts, real posters, 99% gross margin, and every dollar passed through a human gate.
 

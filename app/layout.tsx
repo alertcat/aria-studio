@@ -6,7 +6,7 @@ const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'AAA Studio: Agents. Ads. Accepted.',
+  title: 'Aria Studio, a solo performance',
   description:
     'A one-person media company: three AI directors concept, a Claude jury ranks by pairwise duels and Bradley-Terry, Seedance renders real footage, and the human CEO gates every dollar. Built at BUIDL_OPC_Hackathon_SG 2026.',
 }
