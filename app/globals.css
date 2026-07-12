@@ -1,8 +1,36 @@
 @import 'tailwindcss';
 
+/* Clash Display by Indian Type Foundry, via Fontshare (ITF Free Font License) */
+@font-face {
+  font-family: 'Clash Display';
+  src: url('/fonts/ClashDisplay-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Clash Display';
+  src: url('/fonts/ClashDisplay-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Clash Display';
+  src: url('/fonts/ClashDisplay-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
   --accent: #34d399; /* emerald-400: the single accent, money-coded */
+}
+
+.display {
+  font-family: 'Clash Display', var(--font-geist), ui-sans-serif, sans-serif;
+  letter-spacing: -0.02em;
 }
 
 html {
@@ -93,6 +121,31 @@ body {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 }
 
+/* editorial money ticker */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 36s linear infinite;
+}
+
+/* scrims for text over imagery */
+.scrim-hero {
+  background: linear-gradient(
+    to top,
+    #09090b 8%,
+    rgba(9, 9, 11, 0.72) 34%,
+    rgba(9, 9, 11, 0.35) 60%,
+    rgba(9, 9, 11, 0.55) 100%
+  );
+}
+.scrim-panel {
+  background: linear-gradient(to right, rgba(9, 9, 11, 0.92) 30%, rgba(9, 9, 11, 0.55) 70%, rgba(9, 9, 11, 0.35) 100%);
+}
+
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -118,7 +171,8 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .pulse-soft,
-  .shimmer {
+  .shimmer,
+  .marquee-track {
     animation: none;
   }
   html {

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, useReducedMotion, useMotionValue, useTransform, animate, AnimatePresence } from 'motion/react'
@@ -9,7 +9,6 @@ import {
   ArrowUUpLeft,
   Scales,
   FilmSlate,
-  Coins,
   UserCircleCheck,
   CircleNotch,
 } from '@phosphor-icons/react'
@@ -103,6 +102,16 @@ const PORTRAIT: Record<string, string> = {
 }
 
 const READONLY = process.env.NEXT_PUBLIC_READONLY === '1'
+
+const MARQUEE_ITEMS = [
+  'Product ads',
+  'Travel promos',
+  'Science explainers',
+  'Real renders',
+  'Jury ranked',
+  'Human gated',
+  'USDC settled',
+]
 
 function fmtTime(t: number) {
   return new Date(t).toLocaleTimeString('en-GB', { hour12: false })
@@ -200,80 +209,148 @@ export default function Page() {
     reduce
       ? {}
       : {
-          initial: { opacity: 0, y: 18 },
+          initial: { opacity: 0, y: 22 },
           animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] as const },
+          transition: { duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] as const },
         }
   const inView = (delay = 0) =>
     reduce
       ? {}
       : {
-          initial: { opacity: 0, y: 22 },
+          initial: { opacity: 0, y: 24 },
           whileInView: { opacity: 1, y: 0 },
-          viewport: { once: true, amount: 0.25 },
-          transition: { duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] as const },
+          viewport: { once: true, amount: 0.2 },
+          transition: { duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] as const },
         }
+
+  const stageCard = !selected ? (
+    <div className="card flex aspect-[9/16] items-center justify-center text-[13px] text-zinc-600">
+      No active order
+    </div>
+  ) : selected.videoFile ? (
+    <video
+      src={selected.videoFile}
+      controls
+      autoPlay
+      muted
+      loop
+      playsInline
+      className="w-full rounded-2xl border border-white/15"
+    />
+  ) : selected.status === 'producing' ? (
+    <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 bg-[#0b0b0d]/80 p-6 backdrop-blur-sm">
+      <FilmSlate size={26} className="text-emerald-400" />
+      <div className="mono text-4xl font-semibold">{selected.videoProgress ?? 0}%</div>
+      <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-emerald-400 transition-all duration-700"
+          style={{ width: `${selected.videoProgress ?? 2}%` }}
+        />
+      </div>
+      <div className="mono text-center text-[11px] leading-relaxed text-zinc-400">
+        Seedance 2.0 mini rendering
+        <br />
+        poster in parallel
+      </div>
+    </div>
+  ) : selected.status === 'greenlight' ? (
+    <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 bg-[#0b0b0d]/80 p-7 text-center backdrop-blur-sm">
+      <UserCircleCheck size={28} className="text-emerald-300" />
+      <div className="display text-[17px] font-semibold leading-snug">
+        Three concepts ranked.
+        <br />
+        Your call funds the render.
+      </div>
+      <a href="#operate" className="btn-primary rounded-full px-4 py-2 text-[12.5px] font-semibold">
+        Review concepts
+      </a>
+    </div>
+  ) : (
+    <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-3 bg-[#0b0b0d]/80 p-6 backdrop-blur-sm">
+      <div className="shimmer h-2 w-2/3 rounded-full" />
+      <div className="shimmer h-2 w-1/2 rounded-full" />
+      <div className="mono mt-1 text-[11.5px] text-zinc-400">
+        {selected ? STATUS_LABEL[selected.status] : ''}
+      </div>
+    </div>
+  )
 
   return (
     <div className="min-h-[100dvh]">
       {/* nav */}
-      <nav className="sticky top-0 z-40 border-b border-white/5 bg-[#09090b]/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-6">
-          <div className="flex items-center gap-2.5">
-            <span className="h-3 w-3 rounded-[4px] bg-emerald-400" />
-            <span className="text-[16px] font-semibold tracking-tight">Aria Studio</span>
-            <span className="mono hidden text-[11px] text-zinc-600 sm:inline">a solo performance</span>
+      <nav className="fixed inset-x-0 top-0 z-40 border-b border-white/5 bg-[#09090b]/70 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-6">
+          <div className="flex items-baseline gap-2.5">
+            <span className="display text-[18px] font-semibold tracking-tight">Aria Studio</span>
+            <span className="mono hidden text-[11px] text-zinc-500 sm:inline">a solo performance</span>
           </div>
           <div className="mono flex items-center gap-5 text-[13px]">
-            <span className="text-zinc-500">
-              revenue <span className="font-medium text-emerald-400"><AnimatedMoney value={state.revenue} /></span>
+            <span className="text-zinc-400">
+              revenue{' '}
+              <span className="font-medium text-emerald-400">
+                <AnimatedMoney value={state.revenue} />
+              </span>
             </span>
-            <span className="hidden text-zinc-500 sm:inline">
+            <span className="hidden text-zinc-400 sm:inline">
               margin <span className="font-medium text-zinc-100">{grossMargin ? `${grossMargin}%` : '--'}</span>
             </span>
-            <span className="hidden text-zinc-500 md:inline">
-              shipped <span className="font-medium text-zinc-100">{state.delivered}</span>
-            </span>
-            <span className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+            <span className="rounded-full border border-white/15 px-3 py-1 text-zinc-200">
               CEO {data.company.ceo}
             </span>
           </div>
         </div>
       </nav>
 
-      {/* hero */}
-      <header className="hero-wash">
-        <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 px-6 pb-14 pt-14 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-14">
+      {/* hero: full-bleed cinematic */}
+      <header className="hero-wash relative flex min-h-[96dvh] items-end overflow-hidden">
+        <motion.img
+          src="/media/bg-hero.png"
+          alt=""
+          initial={reduce ? false : { scale: 1.06, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="scrim-hero absolute inset-0" />
+        <div className="relative mx-auto grid w-full max-w-[1440px] grid-cols-1 items-end gap-10 px-6 pb-16 pt-32 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div>
             <motion.h1
-              {...enter(0)}
-              className="text-6xl font-semibold tracking-tighter leading-[0.98] md:text-7xl xl:text-8xl"
+              {...enter(0.1)}
+              className="display max-w-[10ch] text-7xl font-semibold leading-[0.94] md:text-8xl xl:text-[7.25rem]"
             >
               Agents ship footage.
             </motion.h1>
-            <motion.p {...enter(0.08)} className="mt-5 max-w-[46ch] text-[15px] leading-relaxed text-zinc-400">
+            <motion.p {...enter(0.22)} className="mt-6 max-w-[44ch] text-[16px] leading-relaxed text-zinc-300">
               A one-person media company: three AI directors, a Claude jury, real renders, and a
               human gate on every dollar.
             </motion.p>
-            <motion.div {...enter(0.16)} className="mt-7 flex items-center gap-3">
+            <motion.div {...enter(0.32)} className="mt-8 flex items-center gap-3">
               <a
                 href="#operate"
-                className="btn-primary flex items-center gap-2 rounded-full px-5 py-2.5 text-[13.5px] font-semibold"
+                className="btn-primary flex items-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold"
               >
                 Run a live brief <ArrowRight size={15} weight="bold" />
               </a>
-              <a href="#showcase" className="btn-ghost flex items-center gap-2 rounded-full px-5 py-2.5 text-[13.5px] font-medium">
+              <a
+                href="#showcase"
+                className="btn-ghost flex items-center gap-2 rounded-full px-6 py-3 text-[14px] font-medium backdrop-blur-sm"
+              >
                 <Play size={15} /> See shipped work
               </a>
             </motion.div>
           </div>
 
-          {/* featured stage */}
-          <motion.div {...enter(0.12)} className="relative">
+          {/* floating featured stage */}
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 30, rotate: 0 }}
+            animate={{ opacity: 1, y: 0, rotate: 1.2 }}
+            transition={{ duration: 0.8, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="relative hidden shadow-[0_40px_120px_rgba(0,0,0,0.7)] lg:block"
+          >
             {selected && (
-              <div className="mono mb-2 flex items-center justify-between text-[11.5px] text-zinc-500">
+              <div className="mono mb-2 flex items-center justify-between text-[11px] text-zinc-400">
                 <span className="truncate pr-3">
-                  {selected.client} / {selected.title}
+                  {selected.client} / {money(selected.amountUsd)}
                 </span>
                 <span
                   className={
@@ -296,81 +373,47 @@ export default function Page() {
                 exit={reduce ? undefined : { opacity: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                {!selected ? (
-                  <div className="card flex aspect-[9/16] items-center justify-center text-[13px] text-zinc-600">
-                    No active order
-                  </div>
-                ) : selected.videoFile ? (
-                  <video
-                    src={selected.videoFile}
-                    controls
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    className="w-full rounded-2xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
-                  />
-                ) : selected.status === 'producing' ? (
-                  <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 p-6">
-                    <FilmSlate size={26} className="text-emerald-400" />
-                    <div className="mono text-4xl font-semibold">{selected.videoProgress ?? 0}%</div>
-                    <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-emerald-400 transition-all duration-700"
-                        style={{ width: `${selected.videoProgress ?? 2}%` }}
-                      />
-                    </div>
-                    <div className="mono text-center text-[11px] leading-relaxed text-zinc-500">
-                      Seedance 2.0 mini rendering
-                      <br />
-                      poster in parallel
-                    </div>
-                  </div>
-                ) : selected.status === 'greenlight' ? (
-                  <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 p-7 text-center">
-                    <UserCircleCheck size={28} className="text-emerald-300" />
-                    <div className="text-[15px] font-medium leading-snug">
-                      Three concepts ranked.
-                      <br />
-                      Your call funds the render.
-                    </div>
-                    <a href="#operate" className="btn-primary rounded-full px-4 py-2 text-[12.5px] font-semibold">
-                      Review concepts
-                    </a>
-                  </div>
-                ) : (
-                  <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-3 p-6">
-                    <div className="shimmer h-2 w-2/3 rounded-full" />
-                    <div className="shimmer h-2 w-1/2 rounded-full" />
-                    <div className="mono mt-1 text-[11.5px] text-zinc-500">
-                      {selected ? STATUS_LABEL[selected.status] : ''}
-                    </div>
-                  </div>
-                )}
+                {stageCard}
               </motion.div>
             </AnimatePresence>
             {selected?.posterFile && (
               <img
                 src={selected.posterFile}
                 alt="Campaign key visual"
-                className="absolute -left-4 bottom-4 w-[86px] rotate-[-3deg] rounded-lg border border-white/15 shadow-xl"
+                className="absolute -left-6 bottom-5 w-[84px] -rotate-6 rounded-lg border border-white/20 shadow-2xl"
               />
             )}
           </motion.div>
         </div>
       </header>
 
-      {/* showcase */}
-      <section id="showcase" className="mx-auto max-w-[1400px] px-6 py-20">
-        <motion.div {...inView()} className="mb-5 flex items-end justify-between">
+      {/* marquee */}
+      <div className="overflow-hidden border-y border-white/5 bg-white/[0.015] py-3.5">
+        <div className="marquee-track">
+          {[0, 1].map((dup) => (
+            <div key={dup} className="flex shrink-0 items-center">
+              {MARQUEE_ITEMS.map((it) => (
+                <span key={it + dup} className="display flex items-center text-[17px] font-medium text-zinc-500">
+                  <span className="px-6">{it}</span>
+                  <span className="text-emerald-400/60">/</span>
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* showcase: gallery wall */}
+      <section id="showcase" className="mx-auto max-w-[1440px] px-6 py-24">
+        <motion.div {...inView()} className="mb-10 flex items-end justify-between">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Shipped work</h2>
-            <p className="mt-1 text-[13.5px] text-zinc-500">
+            <h2 className="display text-4xl font-semibold tracking-tight md:text-5xl">Shipped work</h2>
+            <p className="mt-2 text-[14px] text-zinc-500">
               Real renders, accepted by a human, settled from escrow.
             </p>
           </div>
           {shipped.length > 0 && (
-            <div className="mono text-[12.5px] text-zinc-500">
+            <div className="mono hidden text-[12.5px] text-zinc-500 md:block">
               {shipped.length} deliverables / <span className="text-emerald-400">{money(state.revenue)}</span> collected
             </div>
           )}
@@ -380,27 +423,40 @@ export default function Page() {
             Nothing shipped yet. Run a brief below.
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 xl:grid-cols-4">
             {shipped.map((o, i) => (
               <motion.button
                 key={o.id}
-                {...inView(i * 0.05)}
+                {...inView(i * 0.06)}
                 onClick={() => {
                   setSelectedId(o.id)
                   window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
                 }}
-                className="hover-lift group relative overflow-hidden rounded-2xl border border-white/10 text-left"
+                className="group text-left"
               >
-                {o.videoFile ? (
-                  <video src={o.videoFile} muted loop autoPlay playsInline className="aspect-[9/16] w-full object-cover" />
-                ) : (
-                  <img src={o.posterFile} alt={o.title} className="aspect-[9/16] w-full object-cover" />
-                )}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent p-3 pt-10">
-                  <div className="text-[12.5px] font-medium leading-tight">{o.title}</div>
-                  <div className="mono mt-1 flex items-center justify-between text-[11px] text-zinc-400">
-                    <span className="truncate pr-2">{o.client}</span>
-                    <span className="font-semibold text-emerald-400">{money(o.amountUsd)}</span>
+                <div className="hover-lift relative overflow-hidden rounded-xl border border-white/10">
+                  {o.videoFile ? (
+                    <video
+                      src={o.videoFile}
+                      muted
+                      loop
+                      autoPlay
+                      playsInline
+                      className="aspect-[9/16] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                    />
+                  ) : (
+                    <img src={o.posterFile} alt={o.title} className="aspect-[9/16] w-full object-cover" />
+                  )}
+                </div>
+                <div className="mt-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="display truncate text-[15px] font-medium leading-tight">{o.title}</div>
+                    <div className="mt-0.5 text-[12px] text-zinc-500">
+                      {o.client} / {o.vertical}
+                    </div>
+                  </div>
+                  <div className="mono shrink-0 text-[13px] font-semibold text-emerald-400">
+                    {money(o.amountUsd)}
                   </div>
                 </div>
               </motion.button>
@@ -409,112 +465,136 @@ export default function Page() {
         )}
       </section>
 
-      {/* the loop */}
-      <section className="border-y border-white/5 bg-white/[0.015]">
-        <div className="mx-auto max-w-[1400px] px-6 py-20">
-          <motion.div {...inView()}>
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              Cents explore. Dollars render. A human gates both.
-            </h2>
-            <p className="mt-1 max-w-[62ch] text-[13.5px] text-zinc-500">
-              The jury is the economic filter: pairwise Claude duels aggregated with Bradley-Terry,
-              the same mechanism that took rank 1 in Ethereum Foundation&apos;s Deep Funding contest.
-            </p>
-          </motion.div>
-          <motion.div {...inView(0.08)} className="mt-8 flex flex-wrap items-stretch gap-2">
-            {[
-              { icon: <Coins size={17} />, label: 'Brief escrowed', sub: 'client budget locked', human: false },
-              { icon: <FilmSlate size={17} />, label: '3 concepts', sub: '$0.02 total', human: false },
-              { icon: <Scales size={17} />, label: 'Jury duels', sub: '6 duels, $0.01', human: false },
-              { icon: <UserCircleCheck size={17} />, label: 'Greenlight', sub: 'human funds the render', human: true },
-              { icon: <FilmSlate size={17} />, label: 'Render + poster', sub: '$0.27, about 2 min', human: false },
-              { icon: <CheckCircle size={17} />, label: 'Accept', sub: 'human releases escrow, USDC settles', human: true },
-            ].map((s, i, arr) => (
-              <div key={s.label} className="flex items-center gap-2">
-                <div
+      {/* the loop: editorial steps over set imagery */}
+      <section className="relative overflow-hidden border-y border-white/5">
+        <img src="/media/bg-loop.png" alt="" className="absolute inset-0 h-full w-full object-cover opacity-50" />
+        <div className="scrim-panel absolute inset-0" />
+        <div className="relative mx-auto grid max-w-[1440px] grid-cols-1 gap-14 px-6 py-24 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div>
+            <motion.div {...inView()}>
+              <h2 className="display max-w-[16ch] text-4xl font-semibold tracking-tight md:text-5xl">
+                Cents explore. Dollars render. A human gates both.
+              </h2>
+              <p className="mt-3 max-w-[58ch] text-[14px] leading-relaxed text-zinc-400">
+                The jury is the economic filter: pairwise Claude duels aggregated with
+                Bradley-Terry, the same mechanism that took rank 1 in Ethereum Foundation&apos;s
+                Deep Funding contest.
+              </p>
+            </motion.div>
+            <div className="mt-10 space-y-1">
+              {[
+                { n: '01', label: 'Brief escrowed', sub: 'client budget locked on-chain', human: false },
+                { n: '02', label: 'Three concepts', sub: '$0.02 total, gpt-5.4-mini', human: false },
+                { n: '03', label: 'Jury duels', sub: '6 duels, $0.01, claude-sonnet-5', human: false },
+                { n: '04', label: 'Greenlight', sub: 'the human funds the render', human: true },
+                { n: '05', label: 'Render and poster', sub: '$0.27, about two minutes', human: false },
+                { n: '06', label: 'Accept', sub: 'the human releases escrow, USDC settles', human: true },
+              ].map((s, i) => (
+                <motion.div
+                  key={s.n}
+                  {...inView(i * 0.05)}
                   className={
-                    'relative flex min-w-[150px] flex-col gap-1 overflow-hidden rounded-2xl border px-4 py-3 ' +
-                    (s.human ? 'border-emerald-400/40 bg-emerald-400/5' : 'border-white/8 bg-white/[0.02]')
+                    'flex items-baseline gap-5 border-b py-4 ' +
+                    (s.human ? 'border-emerald-400/25' : 'border-white/8')
                   }
                 >
-                  <span className="mono pointer-events-none absolute -right-1 -top-2 text-[34px] font-semibold leading-none text-white/[0.06]">
-                    {String(i + 1).padStart(2, '0')}
+                  <span
+                    className={
+                      'display text-3xl font-semibold md:text-4xl ' +
+                      (s.human ? 'text-emerald-400/70' : 'text-white/15')
+                    }
+                  >
+                    {s.n}
                   </span>
-                  <div className={'flex items-center gap-2 text-[13px] font-medium ' + (s.human ? 'text-emerald-300' : 'text-zinc-200')}>
-                    {s.icon} {s.label}
+                  <div className="flex flex-1 flex-wrap items-baseline justify-between gap-x-6">
+                    <span className={'display text-xl font-medium md:text-2xl ' + (s.human ? 'text-emerald-300' : 'text-zinc-100')}>
+                      {s.label}
+                    </span>
+                    <span className="mono text-[12px] text-zinc-500">{s.sub}</span>
                   </div>
-                  <div className="mono text-[11px] text-zinc-500">{s.sub}</div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+          <motion.div {...inView(0.15)} className="flex flex-col justify-end gap-8">
+            <div className="mono space-y-6 text-[13px]">
+              <div>
+                <div className="text-zinc-500">avg order</div>
+                <div className="display mt-1 text-4xl font-semibold text-zinc-100">
+                  {shipped.length ? money(state.revenue / shipped.length) : '--'}
                 </div>
-                {i < arr.length - 1 && <ArrowRight size={14} className="shrink-0 text-zinc-700" />}
               </div>
-            ))}
-          </motion.div>
-          <motion.div {...inView(0.14)} className="mono mt-8 flex flex-wrap gap-10 text-[13px]">
-            <div>
-              <div className="text-zinc-500">avg order</div>
-              <div className="mt-0.5 text-2xl font-semibold text-zinc-100">
-                {shipped.length ? money(state.revenue / shipped.length) : '--'}
+              <div>
+                <div className="text-zinc-500">avg cogs</div>
+                <div className="display mt-1 text-4xl font-semibold text-zinc-100">
+                  {shipped.length ? '$' + (cogsDelivered / shipped.length).toFixed(2) : '--'}
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-zinc-500">avg cogs</div>
-              <div className="mt-0.5 text-2xl font-semibold text-zinc-100">
-                {shipped.length ? '$' + (cogsDelivered / shipped.length).toFixed(2) : '--'}
+              <div>
+                <div className="text-zinc-500">gross margin</div>
+                <div className="display mt-1 text-4xl font-semibold text-emerald-400">
+                  {grossMargin ? `${grossMargin}%` : '--'}
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-zinc-500">gross margin</div>
-              <div className="mt-0.5 text-2xl font-semibold text-emerald-400">
-                {grossMargin ? `${grossMargin}%` : '--'}
+              <div>
+                <div className="text-zinc-500">turnaround</div>
+                <div className="display mt-1 text-4xl font-semibold text-zinc-100">same hour</div>
               </div>
-            </div>
-            <div>
-              <div className="text-zinc-500">turnaround</div>
-              <div className="mt-0.5 text-2xl font-semibold text-zinc-100">same hour</div>
             </div>
           </motion.div>
         </div>
       </section>
 
       {/* team */}
-      <section className="mx-auto max-w-[1400px] px-6 py-20">
+      <section className="mx-auto max-w-[1440px] px-6 py-24">
         <motion.div {...inView()}>
-          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Three directors and a jury</h2>
-          <p className="mt-1 text-[13.5px] text-zinc-500">
+          <h2 className="display text-4xl font-semibold tracking-tight md:text-5xl">
+            Three directors and a jury
+          </h2>
+          <p className="mt-2 text-[14px] text-zinc-500">
             Distinct creative crafts compete on every brief. Reputation accrues per shipped order.
           </p>
         </motion.div>
-        <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {agents.map((a, i) => (
-            <motion.div key={a.id} {...inView(i * 0.06)} className="hover-lift overflow-hidden rounded-2xl border border-white/10">
-              <img src={PORTRAIT[a.id]} alt={`${a.name}, ${a.role}`} className="aspect-square w-full object-cover" />
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-[15px] font-semibold">{a.name}</div>
-                  <span
-                    className={
-                      'h-2 w-2 rounded-full ' + (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-emerald-400/80')
-                    }
-                  />
+            <motion.div key={a.id} {...inView(i * 0.07)} className="group">
+              <div className="hover-lift overflow-hidden rounded-2xl border border-white/10">
+                <img
+                  src={PORTRAIT[a.id]}
+                  alt={`${a.name}, ${a.role}`}
+                  className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <div>
+                  <span className="display text-[17px] font-semibold">{a.name}</span>
+                  <span className="ml-2 text-[12.5px] text-zinc-500">{a.role}</span>
                 </div>
-                <div className="text-[12.5px] text-zinc-400">{a.role}</div>
-                <div className="mono mt-2 text-[11.5px] text-zinc-500">
-                  rep {a.reputation} / {a.delivered} shipped / ${a.feeUsd} per concept
-                </div>
+                <span
+                  className={
+                    'h-2 w-2 rounded-full ' + (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-emerald-400/80')
+                  }
+                />
+              </div>
+              <div className="mono mt-1 text-[11.5px] text-zinc-500">
+                rep {a.reputation} / {a.delivered} shipped / ${a.feeUsd} per concept
               </div>
             </motion.div>
           ))}
-          <motion.div {...inView(0.2)} className="flex flex-col justify-between rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-4">
+          <motion.div
+            {...inView(0.22)}
+            className="flex flex-col justify-between rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-5"
+          >
             <div>
-              <div className="flex items-center gap-2 text-[15px] font-semibold text-emerald-300">
-                <Scales size={17} /> The Jury
+              <div className="display flex items-center gap-2 text-[19px] font-semibold text-emerald-300">
+                <Scales size={19} /> The Jury
               </div>
-              <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
+              <p className="mt-3 text-[13px] leading-relaxed text-zinc-400">
                 Judge BRAND scores client fit. Judge SCROLL scores stopping power. Every pair of
                 concepts duels, Bradley-Terry aggregates the verdicts.
               </p>
             </div>
-            <div className="mono mt-3 text-[11.5px] text-zinc-500">
+            <div className="mono mt-4 text-[11.5px] text-zinc-500">
               claude-sonnet-5 on the founder&apos;s own relay
             </div>
           </motion.div>
@@ -523,15 +603,15 @@ export default function Page() {
 
       {/* operate */}
       <section id="operate" className="border-y border-white/5 bg-white/[0.015]">
-        <div className="mx-auto max-w-[1400px] px-6 py-20">
+        <div className="mx-auto max-w-[1440px] px-6 py-24">
           <motion.div {...inView()}>
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Run the studio</h2>
-            <p className="mt-1 text-[13.5px] text-zinc-500">
+            <h2 className="display text-4xl font-semibold tracking-tight md:text-5xl">Run the studio</h2>
+            <p className="mt-2 text-[14px] text-zinc-500">
               Lock a brief into escrow, then make the two calls only a human makes here.
             </p>
           </motion.div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.45fr_1fr]">
+          <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-[1.45fr_1fr]">
             {/* left: selected order operations */}
             <div className="card p-5">
               {!selected ? (
@@ -543,10 +623,11 @@ export default function Page() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="mono text-[11.5px] text-zinc-500">
-                        {selected.client} / {selected.vertical} / <span className="text-zinc-300">{money(selected.amountUsd)} in escrow</span>
+                        {selected.client} / {selected.vertical} /{' '}
+                        <span className="text-zinc-300">{money(selected.amountUsd)} in escrow</span>
                         {selected.revision > 0 && <span className="text-amber-400"> / rev {selected.revision}</span>}
                       </div>
-                      <div className="mt-1 text-[17px] font-semibold tracking-tight">{selected.title}</div>
+                      <div className="display mt-1 text-[19px] font-semibold tracking-tight">{selected.title}</div>
                     </div>
                     <span
                       className={
@@ -562,6 +643,9 @@ export default function Page() {
                     </span>
                   </div>
                   <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-500">{selected.brief}</p>
+
+                  {/* mobile stage */}
+                  <div className="mt-4 lg:hidden">{stageCard}</div>
 
                   {/* greenlight picker */}
                   {selected.status === 'greenlight' && (
@@ -582,7 +666,7 @@ export default function Page() {
                                 <div className="mono text-[11px] text-zinc-500">
                                   {a.name} / jury strength {(r.score * 100).toFixed(0)}% / {r.wins} duel wins
                                 </div>
-                                <div className="mt-0.5 text-[15px] font-semibold">{d.concept.concept}</div>
+                                <div className="display mt-0.5 text-[16px] font-semibold">{d.concept.concept}</div>
                                 <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-400">{d.concept.hook}</p>
                               </div>
                               {!READONLY && (
@@ -613,10 +697,14 @@ export default function Page() {
                         <div className="mono text-[11px] text-zinc-500">
                           winning concept by {agentOf(selected.winnerAgentId)?.name}
                         </div>
-                        <div className="mt-0.5 text-[15px] font-semibold">{winnerDraft?.concept.concept}</div>
+                        <div className="display mt-0.5 text-[16px] font-semibold">{winnerDraft?.concept.concept}</div>
                         <div className="mono mt-2 flex gap-6 text-[12px] text-zinc-400">
-                          <span>price <span className="text-zinc-100">{money(selected.amountUsd)}</span></span>
-                          <span>cogs <span className="text-zinc-100">${selected.cogsUsd.toFixed(2)}</span></span>
+                          <span>
+                            price <span className="text-zinc-100">{money(selected.amountUsd)}</span>
+                          </span>
+                          <span>
+                            cogs <span className="text-zinc-100">${selected.cogsUsd.toFixed(2)}</span>
+                          </span>
                           <span>
                             margin{' '}
                             <span className="text-emerald-400">
@@ -626,30 +714,30 @@ export default function Page() {
                         </div>
                       </div>
                       {!READONLY && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <button
-                          onClick={() => post('/api/review', { orderId: selected.id, action: 'approve' })}
-                          className="btn-primary flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold"
-                        >
-                          <CheckCircle size={16} weight="bold" /> Accept and settle
-                        </button>
-                        <input
-                          aria-label="CEO revision notes"
-                          placeholder="Notes: hook harder, warmer light, tighter ending"
-                          value={feedbackText}
-                          onChange={(e) => setFeedbackText(e.target.value)}
-                          className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-[12.5px] outline-none placeholder:text-zinc-600 focus:border-emerald-400/50"
-                        />
-                        <button
-                          onClick={() => {
-                            post('/api/review', { orderId: selected.id, action: 'revise', feedback: feedbackText })
-                            setFeedbackText('')
-                          }}
-                          className="btn-ghost flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12.5px] font-medium"
-                        >
-                          <ArrowUUpLeft size={14} /> Send back
-                        </button>
-                      </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            onClick={() => post('/api/review', { orderId: selected.id, action: 'approve' })}
+                            className="btn-primary flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold"
+                          >
+                            <CheckCircle size={16} weight="bold" /> Accept and settle
+                          </button>
+                          <input
+                            aria-label="CEO revision notes"
+                            placeholder="Notes: hook harder, warmer light, tighter ending"
+                            value={feedbackText}
+                            onChange={(e) => setFeedbackText(e.target.value)}
+                            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-[12.5px] outline-none placeholder:text-zinc-600 focus:border-emerald-400/50"
+                          />
+                          <button
+                            onClick={() => {
+                              post('/api/review', { orderId: selected.id, action: 'revise', feedback: feedbackText })
+                              setFeedbackText('')
+                            }}
+                            className="btn-ghost flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12.5px] font-medium"
+                          >
+                            <ArrowUUpLeft size={14} /> Send back
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -709,7 +797,7 @@ export default function Page() {
             <div className="flex flex-col gap-4">
               {READONLY ? (
                 <div className="card p-5">
-                  <div className="text-[14px] font-semibold">Hosted showcase</div>
+                  <div className="display text-[16px] font-semibold">Hosted showcase</div>
                   <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-500">
                     This page is a read-only snapshot of a real production day. The live pipeline
                     (director agents, jury duels, Seedance renders, on-chain settlement) runs on the
@@ -725,131 +813,139 @@ export default function Page() {
                   </a>
                 </div>
               ) : (
-              <div className="card p-5">
-                <div className="text-[14px] font-semibold">New brief</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {templates.map((t, i) => (
-                    <button
-                      key={i}
-                      onClick={() => post('/api/orders', { template: i })}
-                      className="btn-ghost rounded-full px-3.5 py-2 text-[12px]"
-                    >
-                      {t.client} <span className="mono text-zinc-500">{money(t.amountUsd)}</span>
-                    </button>
-                  ))}
-                  <button onClick={() => setShowCustom((v) => !v)} className="btn-ghost rounded-full px-3.5 py-2 text-[12px]">
-                    + custom
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPlaybookDraft(state.playbook)
-                      setShowPlaybook((v) => !v)
-                    }}
-                    className="btn-ghost rounded-full px-3.5 py-2 text-[12px]"
-                  >
-                    Playbook
-                  </button>
-                </div>
-
-                {showCustom && (
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="col-span-1">
-                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-client">Client</label>
-                      <input
-                        id="c-client"
-                        value={custom.client}
-                        onChange={(e) => setCustom({ ...custom, client: e.target.value })}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
-                      />
-                    </div>
-                    <div className="col-span-1">
-                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-vert">Vertical</label>
-                      <select
-                        id="c-vert"
-                        value={custom.vertical}
-                        onChange={(e) => setCustom({ ...custom, vertical: e.target.value })}
-                        className="w-full rounded-lg border border-white/10 bg-[#131316] px-3 py-2 text-[12.5px] text-zinc-200 outline-none focus:border-emerald-400/50"
-                      >
-                        <option>product ad</option>
-                        <option>travel promo</option>
-                        <option>science explainer</option>
-                        <option>brand film</option>
-                      </select>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-title">Order title</label>
-                      <input
-                        id="c-title"
-                        value={custom.title}
-                        onChange={(e) => setCustom({ ...custom, title: e.target.value })}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-brief">
-                        Brief: audience, feel, what to end on
-                      </label>
-                      <textarea
-                        id="c-brief"
-                        rows={3}
-                        value={custom.brief}
-                        onChange={(e) => setCustom({ ...custom, brief: e.target.value })}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-emerald-400/50"
-                      />
-                    </div>
-                    <div className="col-span-1">
-                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-usd">Budget (USD)</label>
-                      <input
-                        id="c-usd"
-                        type="number"
-                        value={custom.amountUsd}
-                        onChange={(e) => setCustom({ ...custom, amountUsd: Number(e.target.value) })}
-                        className="mono w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
-                      />
-                    </div>
-                    <div className="col-span-1 flex items-end">
+                <div className="card p-5">
+                  <div className="display text-[16px] font-semibold">New brief</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {templates.map((t, i) => (
                       <button
-                        onClick={() => {
-                          post('/api/orders', custom)
-                          setShowCustom(false)
-                        }}
-                        className="btn-primary w-full rounded-full px-4 py-2 text-[12.5px] font-semibold"
+                        key={i}
+                        onClick={() => post('/api/orders', { template: i })}
+                        className="btn-ghost rounded-full px-3.5 py-2 text-[12px]"
                       >
-                        Lock escrow
+                        {t.client} <span className="mono text-zinc-500">{money(t.amountUsd)}</span>
                       </button>
-                    </div>
-                  </div>
-                )}
-
-                {showPlaybook && (
-                  <div className="mt-4">
-                    <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="pb">
-                      CEO Playbook, injected into every agent prompt
-                    </label>
-                    <textarea
-                      id="pb"
-                      value={playbookDraft ?? state.playbook}
-                      onChange={(e) => setPlaybookDraft(e.target.value)}
-                      rows={6}
-                      className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-[12px] leading-relaxed outline-none focus:border-emerald-400/50"
-                    />
+                    ))}
+                    <button onClick={() => setShowCustom((v) => !v)} className="btn-ghost rounded-full px-3.5 py-2 text-[12px]">
+                      + custom
+                    </button>
                     <button
                       onClick={() => {
-                        post('/api/playbook', { playbook: playbookDraft })
-                        setShowPlaybook(false)
+                        setPlaybookDraft(state.playbook)
+                        setShowPlaybook((v) => !v)
                       }}
-                      className="btn-primary mt-2 rounded-full px-4 py-2 text-[12.5px] font-semibold"
+                      className="btn-ghost rounded-full px-3.5 py-2 text-[12px]"
                     >
-                      Save playbook
+                      Playbook
                     </button>
                   </div>
-                )}
-              </div>
+
+                  {showCustom && (
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="col-span-1">
+                        <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-client">
+                          Client
+                        </label>
+                        <input
+                          id="c-client"
+                          value={custom.client}
+                          onChange={(e) => setCustom({ ...custom, client: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-vert">
+                          Vertical
+                        </label>
+                        <select
+                          id="c-vert"
+                          value={custom.vertical}
+                          onChange={(e) => setCustom({ ...custom, vertical: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-[#131316] px-3 py-2 text-[12.5px] text-zinc-200 outline-none focus:border-emerald-400/50"
+                        >
+                          <option>product ad</option>
+                          <option>travel promo</option>
+                          <option>science explainer</option>
+                          <option>brand film</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-title">
+                          Order title
+                        </label>
+                        <input
+                          id="c-title"
+                          value={custom.title}
+                          onChange={(e) => setCustom({ ...custom, title: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-brief">
+                          Brief: audience, feel, what to end on
+                        </label>
+                        <textarea
+                          id="c-brief"
+                          rows={3}
+                          value={custom.brief}
+                          onChange={(e) => setCustom({ ...custom, brief: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-emerald-400/50"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="c-usd">
+                          Budget (USD)
+                        </label>
+                        <input
+                          id="c-usd"
+                          type="number"
+                          value={custom.amountUsd}
+                          onChange={(e) => setCustom({ ...custom, amountUsd: Number(e.target.value) })}
+                          className="mono w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                        />
+                      </div>
+                      <div className="col-span-1 flex items-end">
+                        <button
+                          onClick={() => {
+                            post('/api/orders', custom)
+                            setShowCustom(false)
+                          }}
+                          className="btn-primary w-full rounded-full px-4 py-2 text-[12.5px] font-semibold"
+                        >
+                          Lock escrow
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {showPlaybook && (
+                    <div className="mt-4">
+                      <label className="mb-1 block text-[11.5px] text-zinc-400" htmlFor="pb">
+                        CEO Playbook, injected into every agent prompt
+                      </label>
+                      <textarea
+                        id="pb"
+                        value={playbookDraft ?? state.playbook}
+                        onChange={(e) => setPlaybookDraft(e.target.value)}
+                        rows={6}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-[12px] leading-relaxed outline-none focus:border-emerald-400/50"
+                      />
+                      <button
+                        onClick={() => {
+                          post('/api/playbook', { playbook: playbookDraft })
+                          setShowPlaybook(false)
+                        }}
+                        className="btn-primary mt-2 rounded-full px-4 py-2 text-[12.5px] font-semibold"
+                      >
+                        Save playbook
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               {active.length > 0 && (
                 <div className="card p-5">
-                  <div className="text-[14px] font-semibold">In the pipeline</div>
+                  <div className="display text-[16px] font-semibold">In the pipeline</div>
                   <div className="mt-3 space-y-2">
                     {active.map((o) => (
                       <button
@@ -897,14 +993,14 @@ export default function Page() {
       </section>
 
       {/* ledger */}
-      <section className="mx-auto max-w-[1400px] px-6 py-20">
+      <section className="mx-auto max-w-[1440px] px-6 py-24">
         <motion.div {...inView()}>
-          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">The ledger</h2>
-          <p className="mt-1 text-[13.5px] text-zinc-500">
+          <h2 className="display text-4xl font-semibold tracking-tight md:text-5xl">The ledger</h2>
+          <p className="mt-2 text-[14px] text-zinc-500">
             Every event the company emits, and every invoice it settles.
           </p>
         </motion.div>
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.45fr_1fr]">
+        <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-[1.45fr_1fr]">
           <div className="card flex h-[300px] flex-col p-4">
             <div className="mono min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 text-[12px] leading-relaxed">
               {state.events.map((e, i) => (
@@ -918,7 +1014,7 @@ export default function Page() {
             </div>
           </div>
           <div className="card p-4">
-            <div className="text-[14px] font-semibold">Invoices</div>
+            <div className="display text-[16px] font-semibold">Invoices</div>
             <div className="mt-3 space-y-2.5">
               {shipped.slice(0, 5).map((o) => (
                 <div key={o.id} className="flex items-center justify-between gap-3">
@@ -940,7 +1036,7 @@ export default function Page() {
       </section>
 
       <footer className="border-t border-white/5">
-        <div className="mx-auto flex max-w-[1400px] flex-col items-start justify-between gap-2 px-6 py-6 text-[11.5px] text-zinc-600 md:flex-row md:items-center">
+        <div className="mx-auto flex max-w-[1440px] flex-col items-start justify-between gap-2 px-6 py-8 text-[11.5px] text-zinc-600 md:flex-row md:items-center">
           <span>
             OPC formula, implemented: Human Experience is the Playbook, the AI Loop is concepts
             plus jury plus render, Human Review gates the spend and releases escrow.
