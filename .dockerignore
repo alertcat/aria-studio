@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+.git
+.env
+.env.local
+.vercel
+.agents
+.claude
+api_off
+Dockerfile
+fly.toml
+*.log

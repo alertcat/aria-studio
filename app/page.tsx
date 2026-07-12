@@ -102,6 +102,8 @@ const PORTRAIT: Record<string, string> = {
 }
 
 const READONLY = process.env.NEXT_PUBLIC_READONLY === '1'
+const LIVE_URL = process.env.NEXT_PUBLIC_LIVE_URL || ''
+const STUDIO_HREF = READONLY ? (LIVE_URL ? LIVE_URL + '/studio' : '') : '/studio'
 
 const MARQUEE_ITEMS = [
   'Product ads',
@@ -297,6 +299,11 @@ export default function Page() {
             <span className="rounded-full border border-white/15 px-3 py-1 text-zinc-200">
               CEO {data.company.ceo}
             </span>
+            {STUDIO_HREF && (
+              <a href={STUDIO_HREF} className="btn-primary rounded-full px-3.5 py-1.5 text-[12px] font-semibold">
+                Open studio
+              </a>
+            )}
           </div>
         </div>
       </nav>
@@ -326,7 +333,7 @@ export default function Page() {
             </motion.p>
             <motion.div {...enter(0.32)} className="mt-8 flex items-center gap-3">
               <a
-                href="#operate"
+                href={STUDIO_HREF || '#operate'}
                 className="btn-primary flex items-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold"
               >
                 Run a live brief <ArrowRight size={15} weight="bold" />
@@ -601,6 +608,57 @@ export default function Page() {
         </div>
       </section>
 
+      {/* field notes */}
+      <section className="mx-auto max-w-[1440px] px-6 py-24">
+        <motion.div {...inView()}>
+          <h2 className="display text-4xl font-semibold tracking-tight md:text-5xl">Field notes</h2>
+          <p className="mt-2 text-[14px] text-zinc-500">
+            How a one-person studio actually runs: the mechanism, the money, the machines.
+          </p>
+        </motion.div>
+        <div className="mt-10 grid grid-cols-1 gap-x-4 gap-y-10 md:grid-cols-3">
+          {[
+            {
+              img: '/media/journal-jury.png',
+              title: 'Why juries beat scores',
+              sub: 'Pairwise duels and Bradley-Terry, the mechanism that won an Ethereum Foundation contest, now running creative QA.',
+              href: 'https://github.com/alertcat/aria-studio/blob/main/PITCH.md',
+            },
+            {
+              img: '/media/journal-gate.png',
+              title: 'Two gates, where money moves',
+              sub: 'Greenlight funds the render. Acceptance releases escrow. Human judgment sits exactly on the spend.',
+              href: 'https://github.com/alertcat/aria-studio/blob/main/README.md',
+            },
+            {
+              img: '/media/journal-infra.png',
+              title: 'Rendering at wholesale',
+              sub: 'The studio consumes its founder’s own relay infrastructure, so the margin funds taste, not compute.',
+              href: 'https://github.com/alertcat/aria-studio/blob/main/README.md',
+            },
+          ].map((j, i) => (
+            <motion.a
+              key={j.title}
+              {...inView(i * 0.07)}
+              href={j.href}
+              target="_blank"
+              rel="noreferrer"
+              className="group block"
+            >
+              <div className="hover-lift overflow-hidden rounded-2xl border border-white/10">
+                <img
+                  src={j.img}
+                  alt={j.title}
+                  className="aspect-[3/2] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                />
+              </div>
+              <div className="display mt-3 text-[18px] font-semibold leading-snug">{j.title}</div>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-500">{j.sub}</p>
+            </motion.a>
+          ))}
+        </div>
+      </section>
+
       {/* operate */}
       <section id="operate" className="border-y border-white/5 bg-white/[0.015]">
         <div className="mx-auto max-w-[1440px] px-6 py-24">
@@ -803,14 +861,24 @@ export default function Page() {
                     (director agents, jury duels, Seedance renders, on-chain settlement) runs on the
                     founder&apos;s machine during the demo.
                   </p>
-                  <a
-                    href="https://github.com/alertcat/aria-studio"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-ghost mt-3 inline-block rounded-full px-4 py-2 text-[12px] font-medium"
-                  >
-                    View source on GitHub
-                  </a>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {STUDIO_HREF && (
+                      <a
+                        href={STUDIO_HREF}
+                        className="btn-primary inline-block rounded-full px-4 py-2 text-[12px] font-semibold"
+                      >
+                        Open the live control room
+                      </a>
+                    )}
+                    <a
+                      href="https://github.com/alertcat/aria-studio"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-ghost inline-block rounded-full px-4 py-2 text-[12px] font-medium"
+                    >
+                      View source on GitHub
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <div className="card p-5">
