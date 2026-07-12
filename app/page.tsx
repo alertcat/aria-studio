@@ -665,7 +665,20 @@ export default function Page() {
           <motion.div {...inView()}>
             <h2 className="display text-4xl font-semibold tracking-tight md:text-5xl">Run the studio</h2>
             <p className="mt-2 text-[14px] text-zinc-500">
-              Lock a brief into escrow, then make the two calls only a human makes here.
+              {READONLY && STUDIO_HREF ? (
+                <>
+                  The pipeline is running live right now.{' '}
+                  <a
+                    href={STUDIO_HREF}
+                    className="font-medium text-emerald-400 underline decoration-emerald-400/40 hover:text-emerald-300"
+                  >
+                    Open the control room
+                  </a>{' '}
+                  and make the two calls yourself: greenlight a render, release an escrow.
+                </>
+              ) : (
+                'Lock a brief into escrow, then make the two calls only a human makes here.'
+              )}
             </p>
           </motion.div>
 
@@ -745,6 +758,14 @@ export default function Page() {
                       <p className="mono pt-1 text-[11px] text-zinc-600">
                         Concepts cost $0.03 so far. The render you fund costs about $0.27.
                       </p>
+                      {READONLY && STUDIO_HREF && (
+                        <a
+                          href={STUDIO_HREF}
+                          className="btn-primary inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold"
+                        >
+                          Greenlight it yourself in the control room <ArrowRight size={14} weight="bold" />
+                        </a>
+                      )}
                     </div>
                   )}
 
@@ -796,6 +817,14 @@ export default function Page() {
                             <ArrowUUpLeft size={14} /> Send back
                           </button>
                         </div>
+                      )}
+                      {READONLY && STUDIO_HREF && (
+                        <a
+                          href={STUDIO_HREF}
+                          className="btn-primary mt-3 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold"
+                        >
+                          Make this call in the control room <ArrowRight size={14} weight="bold" />
+                        </a>
                       )}
                     </div>
                   )}
@@ -854,12 +883,15 @@ export default function Page() {
             {/* right: intake + active */}
             <div className="flex flex-col gap-4">
               {READONLY ? (
-                <div className="card p-5">
-                  <div className="display text-[16px] font-semibold">Hosted showcase</div>
-                  <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-500">
-                    This page is a read-only snapshot of a real production day. The live pipeline
-                    (director agents, jury duels, Seedance renders, on-chain settlement) runs on the
-                    founder&apos;s machine during the demo.
+                <div className="card border-emerald-400/25 bg-emerald-400/5 p-5">
+                  <div className="display text-[16px] font-semibold text-emerald-300">
+                    The studio is live. Try it yourself.
+                  </div>
+                  <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
+                    This page is the showcase reel. The real pipeline is running right now on the
+                    studio server: fire a brief, watch three directors pitch, see the Claude jury
+                    duel, greenlight the render with your own click, and release the escrow at the
+                    gate. A brief is already waiting at Greenlight for you.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {STUDIO_HREF && (
