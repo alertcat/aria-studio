@@ -98,6 +98,8 @@ npm run dev
 - Framework: Next.js 16, React 19, Tailwind CSS 4, ethers v6. UI written during the event.
 - Mechanism provenance: the pairwise-duel + Bradley-Terry jury design follows the founder's GG24 Deep Funding L3 winning pipeline (pre-event work used as inspiration only; all code here is fresh).
 - USDC test contract: Circle, Base Sepolia `0x036CbD53842c5426634e7929541eC2318f3dCF7e`.
+- Frontend design discipline: [taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) applied via Claude Code.
+- Escrow inbound watcher pattern ported from the founder's own midnight-studio-bot (private repo, USDT listener re-targeted to Base Sepolia USDC).
 - Built with Claude Code as pair programmer (commits co-authored).
 
 ---
