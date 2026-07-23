@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
@@ -80,7 +80,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 const TAG_STYLE: Record<string, string> = {
   PAID: 'text-emerald-400',
   CHAIN: 'text-emerald-400',
-  GLGHT: 'text-emerald-300',
+  GLGHT: 'text-zinc-100',
   GATE: 'text-zinc-100',
   DUEL: 'text-amber-300',
   RANK: 'text-amber-200',
@@ -103,7 +103,7 @@ function money(n: number) {
 const statusChip = (s: OrderStatus) =>
   'mono shrink-0 rounded-full border px-2.5 py-0.5 text-[10.5px] ' +
   (s === 'greenlight' || s === 'review'
-    ? 'border-emerald-400/40 text-emerald-300'
+    ? 'border-white/30 text-zinc-100'
     : s === 'delivered'
       ? 'border-white/10 text-zinc-400'
       : 'border-amber-400/30 text-amber-300')
@@ -182,7 +182,7 @@ export default function StudioPage() {
             <ArrowLeft size={13} /> Site
           </a>
           <span className="display text-[16px] font-semibold tracking-tight">Aria Studio</span>
-          <span className="mono rounded-full border border-emerald-400/30 px-2.5 py-0.5 text-[10.5px] text-emerald-300">
+          <span className="mono rounded-full border border-white/20 px-2.5 py-0.5 text-[10.5px] text-zinc-200">
             CONTROL ROOM / LIVE PIPELINE
           </span>
         </div>
@@ -230,7 +230,7 @@ export default function StudioPage() {
                     id="s-client"
                     value={custom.client}
                     onChange={(e) => setCustom({ ...custom, client: e.target.value })}
-                    className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-emerald-400/50"
+                    className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-white/30"
                   />
                 </div>
                 <div>
@@ -242,7 +242,7 @@ export default function StudioPage() {
                     type="number"
                     value={custom.amountUsd}
                     onChange={(e) => setCustom({ ...custom, amountUsd: Number(e.target.value) })}
-                    className="mono w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-emerald-400/50"
+                    className="mono w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-white/30"
                   />
                 </div>
               </div>
@@ -254,7 +254,7 @@ export default function StudioPage() {
                   id="s-vert"
                   value={custom.vertical}
                   onChange={(e) => setCustom({ ...custom, vertical: e.target.value })}
-                  className="w-full rounded-md border border-white/10 bg-[#131316] px-2 py-1.5 text-[11.5px] text-zinc-200 outline-none focus:border-emerald-400/50"
+                  className="w-full rounded-md border border-white/10 bg-[#131316] px-2 py-1.5 text-[11.5px] text-zinc-200 outline-none focus:border-white/30"
                 >
                   <option>product ad</option>
                   <option>travel promo</option>
@@ -270,7 +270,7 @@ export default function StudioPage() {
                   id="s-title"
                   value={custom.title}
                   onChange={(e) => setCustom({ ...custom, title: e.target.value })}
-                  className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-emerald-400/50"
+                  className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-white/30"
                 />
               </div>
               <div>
@@ -282,7 +282,7 @@ export default function StudioPage() {
                   rows={3}
                   value={custom.brief}
                   onChange={(e) => setCustom({ ...custom, brief: e.target.value })}
-                  className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] leading-relaxed outline-none focus:border-emerald-400/50"
+                  className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] leading-relaxed outline-none focus:border-white/30"
                 />
               </div>
               <button
@@ -300,7 +300,7 @@ export default function StudioPage() {
               value={playbookDraft ?? state.playbook}
               onChange={(e) => setPlaybookDraft(e.target.value)}
               rows={7}
-              className="mt-2 w-full rounded-md border border-white/10 bg-white/5 p-2 text-[11px] leading-relaxed outline-none focus:border-emerald-400/50"
+              className="mt-2 w-full rounded-md border border-white/10 bg-white/5 p-2 text-[11px] leading-relaxed outline-none focus:border-white/30"
             />
             <button
               onClick={() => post('/api/playbook', { playbook: playbookDraft })}
@@ -318,9 +318,9 @@ export default function StudioPage() {
                   key={o.id}
                   onClick={() => setSelectedId(o.id)}
                   className={
-                    'w-full rounded-lg border p-2.5 text-left transition-colors ' +
+                    'tap w-full rounded-lg border p-2.5 text-left transition-colors ' +
                     (selectedId === o.id
-                      ? 'border-emerald-400/40 bg-emerald-400/5'
+                      ? 'border-white/25 bg-white/[0.04]'
                       : 'border-white/8 bg-white/[0.02] hover:border-white/20')
                   }
                 >
@@ -334,7 +334,7 @@ export default function StudioPage() {
                   {o.status === 'producing' && (
                     <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
                       <div
-                        className="h-full rounded-full bg-emerald-400 transition-all"
+                        className="h-full rounded-full bg-zinc-200 transition-all"
                         style={{ width: `${o.videoProgress ?? 2}%` }}
                       />
                     </div>
@@ -380,11 +380,11 @@ export default function StudioPage() {
                   ][i]
                   return (
                     <span key={lbl} className="flex items-center gap-1">
-                      {i > 0 && <span className={reached ? 'text-emerald-400/60' : 'text-zinc-700'}>-</span>}
+                      {i > 0 && <span className={reached ? 'text-zinc-400' : 'text-zinc-700'}>-</span>}
                       <span
                         className={
                           'rounded-full border px-2 py-0.5 ' +
-                          (reached ? 'border-emerald-400/40 text-emerald-300' : 'border-white/10 text-zinc-600')
+                          (reached ? 'border-white/25 text-zinc-100' : 'border-white/10 text-zinc-600')
                         }
                       >
                         {lbl}
@@ -431,7 +431,7 @@ export default function StudioPage() {
               {/* greenlight: the human pick */}
               {selected.status === 'greenlight' && (
                 <div className="mt-4">
-                  <div className="mono mb-2 text-[11px] text-emerald-300">
+                  <div className="mono mb-2 text-[11px] text-zinc-200">
                     GATE 1 / pick the concept to fund. Concepts cost cents, the render costs about $0.27.
                   </div>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -443,14 +443,14 @@ export default function StudioPage() {
                           key={r.agentId}
                           className={
                             'flex flex-col rounded-xl border p-3.5 ' +
-                            (idx === 0 ? 'border-emerald-400/40 bg-emerald-400/5' : 'border-white/8 bg-white/[0.02]')
+                            (idx === 0 ? 'border-white/20 bg-white/[0.04]' : 'border-white/8 bg-white/[0.02]')
                           }
                         >
                           <div className="mono flex items-center justify-between text-[10.5px] text-zinc-500">
                             <span>
                               {a.name} / {a.role}
                             </span>
-                            {idx === 0 && <span className="text-emerald-300">jury pick</span>}
+                            {idx === 0 && <span className="text-zinc-100">jury pick</span>}
                           </div>
                           <div className="display mt-1 text-[16px] font-semibold">{d.concept.concept}</div>
                           <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-400">{d.concept.hook}</p>
@@ -467,7 +467,7 @@ export default function StudioPage() {
                           <div className="nums mono mt-2 flex items-center gap-2 text-[10.5px] text-zinc-500">
                             <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
                               <div
-                                className="h-full rounded-full bg-emerald-400/80"
+                                className="h-full rounded-full bg-zinc-200"
                                 style={{ width: `${Math.max(6, r.score * 100)}%` }}
                               />
                             </div>
@@ -509,11 +509,11 @@ export default function StudioPage() {
                       />
                     ) : selected.status === 'producing' ? (
                       <div className="card-quiet flex aspect-[9/16] flex-col items-center justify-center gap-3 p-4">
-                        <FilmSlate size={22} className="text-emerald-400" />
+                        <FilmSlate size={22} className="text-zinc-200" />
                         <div className="mono text-3xl font-semibold">{selected.videoProgress ?? 0}%</div>
                         <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/10">
                           <div
-                            className="h-full rounded-full bg-emerald-400 transition-all duration-700"
+                            className="h-full rounded-full bg-zinc-200 transition-all duration-700"
                             style={{ width: `${selected.videoProgress ?? 2}%` }}
                           />
                         </div>
@@ -564,7 +564,7 @@ export default function StudioPage() {
 
                     {selected.status === 'review' && (
                       <div className="mt-3">
-                        <div className="mono mb-1.5 text-[11px] text-emerald-300">
+                        <div className="mono mb-1.5 text-[11px] text-zinc-200">
                           GATE 2 / your acceptance releases the escrow
                         </div>
                         <div className="flex items-center gap-2">
@@ -579,7 +579,7 @@ export default function StudioPage() {
                             placeholder="Notes for the revision"
                             value={feedbackText}
                             onChange={(e) => setFeedbackText(e.target.value)}
-                            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none placeholder:text-zinc-600 focus:border-emerald-400/50"
+                            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none placeholder:text-zinc-600 focus:border-white/30"
                           />
                           <button
                             onClick={() => {
@@ -680,7 +680,7 @@ export default function StudioPage() {
                     <span
                       className={
                         'h-1.5 w-1.5 rounded-full ' +
-                        (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-emerald-400/80')
+                        (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-zinc-500')
                       }
                     />
                   </span>

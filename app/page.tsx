@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, useReducedMotion, useMotionValue, useTransform, animate, AnimatePresence } from 'motion/react'
@@ -82,7 +82,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 const TAG_STYLE: Record<string, string> = {
   PAID: 'text-emerald-400',
   CHAIN: 'text-emerald-400',
-  GLGHT: 'text-emerald-300',
+  GLGHT: 'text-zinc-100',
   GATE: 'text-zinc-100',
   DUEL: 'text-amber-300',
   RANK: 'text-amber-200',
@@ -201,6 +201,7 @@ export default function Page() {
   const selected = orders.find((o) => o.id === selectedId) ?? null
   const agentOf = (id?: string) => agents.find((a) => a.id === id)
   const shipped = orders.filter((o) => o.status === 'delivered')
+  const gallery = shipped.filter((o) => o.videoFile || o.posterFile)
   const active = orders.filter((o) => o.status !== 'delivered')
   const cogsDelivered = shipped.reduce((s, o) => s + o.cogsUsd, 0)
   const grossMargin =
@@ -241,11 +242,11 @@ export default function Page() {
     />
   ) : selected.status === 'producing' ? (
     <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 bg-[#0b0b0d]/80 p-6 backdrop-blur-sm">
-      <FilmSlate size={26} className="text-emerald-400" />
+      <FilmSlate size={26} className="text-zinc-100" />
       <div className="mono text-4xl font-semibold">{selected.videoProgress ?? 0}%</div>
       <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/10">
         <div
-          className="h-full rounded-full bg-emerald-400 transition-all duration-700"
+          className="h-full rounded-full bg-zinc-100 transition-all duration-700"
           style={{ width: `${selected.videoProgress ?? 2}%` }}
         />
       </div>
@@ -257,7 +258,7 @@ export default function Page() {
     </div>
   ) : selected.status === 'greenlight' ? (
     <div className="card flex aspect-[9/16] flex-col items-center justify-center gap-4 bg-[#0b0b0d]/80 p-7 text-center backdrop-blur-sm">
-      <UserCircleCheck size={28} className="text-emerald-300" />
+      <UserCircleCheck size={28} className="text-zinc-100" />
       <div className="display text-[17px] font-semibold leading-snug">
         Three concepts ranked.
         <br />
@@ -362,9 +363,9 @@ export default function Page() {
                 <span
                   className={
                     selected.status === 'delivered' || selected.status === 'review'
-                      ? 'text-emerald-400'
+                      ? 'text-zinc-100'
                       : selected.status === 'greenlight'
-                        ? 'text-emerald-300'
+                        ? 'text-zinc-200'
                         : 'pulse-soft text-amber-300'
                   }
                 >
@@ -402,7 +403,7 @@ export default function Page() {
               {MARQUEE_ITEMS.map((it) => (
                 <span key={it + dup} className="display flex items-center text-[17px] font-medium text-zinc-500">
                   <span className="px-6">{it}</span>
-                  <span className="text-emerald-400/60">/</span>
+                  <span className="text-white/30">/</span>
                 </span>
               ))}
             </div>
@@ -419,27 +420,28 @@ export default function Page() {
               Real renders, accepted by a human, settled from escrow.
             </p>
           </div>
-          {shipped.length > 0 && (
+          {gallery.length > 0 && (
             <div className="mono hidden text-[12.5px] text-zinc-500 md:block">
-              {shipped.length} deliverables / <span className="text-emerald-400">{money(state.revenue)}</span> collected
+              {gallery.length} deliverables / <span className="text-emerald-400">{money(state.revenue)}</span> collected
             </div>
           )}
         </motion.div>
-        {shipped.length === 0 ? (
+        {gallery.length === 0 ? (
           <div className="card-quiet flex h-44 items-center justify-center text-[13px] text-zinc-600">
             Nothing shipped yet. Run a brief below.
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 xl:grid-cols-4">
-            {shipped.map((o, i) => (
+            {gallery.map((o, i) => (
               <motion.button
                 key={o.id}
                 {...inView(i * 0.06)}
+                whileTap={reduce ? undefined : { scale: 0.98 }}
                 onClick={() => {
                   setSelectedId(o.id)
                   window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
                 }}
-                className="group text-left"
+                className="group tap text-left"
               >
                 <div className="hover-lift relative overflow-hidden rounded-xl border border-white/10">
                   {o.videoFile ? (
@@ -462,7 +464,7 @@ export default function Page() {
                       {o.client} / {o.vertical}
                     </div>
                   </div>
-                  <div className="mono shrink-0 text-[13px] font-semibold text-emerald-400">
+                  <div className="mono shrink-0 text-[13px] font-semibold text-zinc-100">
                     {money(o.amountUsd)}
                   </div>
                 </div>
@@ -502,19 +504,19 @@ export default function Page() {
                   {...inView(i * 0.05)}
                   className={
                     'flex items-baseline gap-5 border-b py-4 ' +
-                    (s.human ? 'border-emerald-400/25' : 'border-white/8')
+                    (s.human ? 'border-white/20' : 'border-white/8')
                   }
                 >
                   <span
                     className={
                       'display text-3xl font-semibold md:text-4xl ' +
-                      (s.human ? 'text-emerald-400/70' : 'text-white/15')
+                      (s.human ? 'text-white/45' : 'text-white/15')
                     }
                   >
                     {s.n}
                   </span>
                   <div className="flex flex-1 flex-wrap items-baseline justify-between gap-x-6">
-                    <span className={'display text-xl font-medium md:text-2xl ' + (s.human ? 'text-emerald-300' : 'text-zinc-100')}>
+                    <span className={'display text-xl font-medium md:text-2xl ' + (s.human ? 'text-white' : 'text-zinc-100')}>
                       {s.label}
                     </span>
                     <span className="mono text-[12px] text-zinc-500">{s.sub}</span>
@@ -579,7 +581,7 @@ export default function Page() {
                 </div>
                 <span
                   className={
-                    'h-2 w-2 rounded-full ' + (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-emerald-400/80')
+                    'h-2 w-2 rounded-full ' + (a.status === 'working' ? 'pulse-soft bg-amber-400' : 'bg-white/60')
                   }
                 />
               </div>
@@ -590,10 +592,10 @@ export default function Page() {
           ))}
           <motion.div
             {...inView(0.22)}
-            className="flex flex-col justify-between rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-5"
+            className="flex flex-col justify-between rounded-2xl border border-white/15 bg-white/[0.03] p-5"
           >
             <div>
-              <div className="display flex items-center gap-2 text-[19px] font-semibold text-emerald-300">
+              <div className="display flex items-center gap-2 text-[19px] font-semibold text-zinc-100">
                 <Scales size={19} /> The Jury
               </div>
               <p className="mt-3 text-[13px] leading-relaxed text-zinc-400">
@@ -633,17 +635,18 @@ export default function Page() {
             {
               img: '/media/journal-infra.png',
               title: 'Rendering at wholesale',
-              sub: 'The studio consumes its founder’s own relay infrastructure, so the margin funds taste, not compute.',
+              sub: 'The studio consumes its founder鈥檚 own relay infrastructure, so the margin funds taste, not compute.',
               href: 'https://github.com/alertcat/aria-studio/blob/main/README.md',
             },
           ].map((j, i) => (
             <motion.a
               key={j.title}
               {...inView(i * 0.07)}
+              whileTap={reduce ? undefined : { scale: 0.98 }}
               href={j.href}
               target="_blank"
               rel="noreferrer"
-              className="group block"
+              className="group block tap"
             >
               <div className="hover-lift overflow-hidden rounded-2xl border border-white/10">
                 <img
@@ -670,7 +673,7 @@ export default function Page() {
                   The pipeline is running live right now.{' '}
                   <a
                     href={STUDIO_HREF}
-                    className="font-medium text-emerald-400 underline decoration-emerald-400/40 hover:text-emerald-300"
+                    className="font-medium text-zinc-100 underline decoration-white/35 hover:text-white"
                   >
                     Open the control room
                   </a>{' '}
@@ -704,7 +707,7 @@ export default function Page() {
                       className={
                         'mono shrink-0 rounded-full border px-3 py-1 text-[11px] ' +
                         (selected.status === 'greenlight' || selected.status === 'review'
-                          ? 'border-emerald-400/40 text-emerald-300'
+                          ? 'border-white/30 text-zinc-100'
                           : selected.status === 'delivered'
                             ? 'border-white/10 text-zinc-300'
                             : 'border-amber-400/30 text-amber-300')
@@ -729,7 +732,7 @@ export default function Page() {
                             key={r.agentId}
                             className={
                               'rounded-2xl border p-4 ' +
-                              (idx === 0 ? 'border-emerald-400/40 bg-emerald-400/5' : 'border-white/8 bg-white/[0.02]')
+                              (idx === 0 ? 'border-white/25 bg-white/[0.04]' : 'border-white/8 bg-white/[0.02]')
                             }
                           >
                             <div className="flex items-center justify-between gap-3">
@@ -786,7 +789,7 @@ export default function Page() {
                           </span>
                           <span>
                             margin{' '}
-                            <span className="text-emerald-400">
+                            <span className="text-zinc-100">
                               {(((selected.amountUsd - selected.cogsUsd) / selected.amountUsd) * 100).toFixed(1)}%
                             </span>
                           </span>
@@ -805,7 +808,7 @@ export default function Page() {
                             placeholder="Notes: hook harder, warmer light, tighter ending"
                             value={feedbackText}
                             onChange={(e) => setFeedbackText(e.target.value)}
-                            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-[12.5px] outline-none placeholder:text-zinc-600 focus:border-emerald-400/50"
+                            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-[12.5px] outline-none placeholder:text-zinc-600 focus:border-white/30"
                           />
                           <button
                             onClick={() => {
@@ -846,7 +849,7 @@ export default function Page() {
                               href={'https://' + selected.invoice.ref.split('https://')[1]}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-emerald-400 underline decoration-emerald-400/40 hover:text-emerald-300"
+                              className="text-zinc-100 underline decoration-white/40 hover:text-white"
                             >
                               View on BaseScan
                             </a>
@@ -883,8 +886,8 @@ export default function Page() {
             {/* right: intake + active */}
             <div className="flex flex-col gap-4">
               {READONLY ? (
-                <div className="card border-emerald-400/25 bg-emerald-400/5 p-5">
-                  <div className="display text-[16px] font-semibold text-emerald-300">
+                <div className="card border-white/15 bg-white/[0.03] p-5">
+                  <div className="display text-[16px] font-semibold text-zinc-100">
                     The studio is live. Try it yourself.
                   </div>
                   <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
@@ -949,7 +952,7 @@ export default function Page() {
                           id="c-client"
                           value={custom.client}
                           onChange={(e) => setCustom({ ...custom, client: e.target.value })}
-                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-white/30"
                         />
                       </div>
                       <div className="col-span-1">
@@ -960,7 +963,7 @@ export default function Page() {
                           id="c-vert"
                           value={custom.vertical}
                           onChange={(e) => setCustom({ ...custom, vertical: e.target.value })}
-                          className="w-full rounded-lg border border-white/10 bg-[#131316] px-3 py-2 text-[12.5px] text-zinc-200 outline-none focus:border-emerald-400/50"
+                          className="w-full rounded-lg border border-white/10 bg-[#131316] px-3 py-2 text-[12.5px] text-zinc-200 outline-none focus:border-white/30"
                         >
                           <option>product ad</option>
                           <option>travel promo</option>
@@ -976,7 +979,7 @@ export default function Page() {
                           id="c-title"
                           value={custom.title}
                           onChange={(e) => setCustom({ ...custom, title: e.target.value })}
-                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-white/30"
                         />
                       </div>
                       <div className="col-span-2">
@@ -988,7 +991,7 @@ export default function Page() {
                           rows={3}
                           value={custom.brief}
                           onChange={(e) => setCustom({ ...custom, brief: e.target.value })}
-                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-emerald-400/50"
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-white/30"
                         />
                       </div>
                       <div className="col-span-1">
@@ -1000,7 +1003,7 @@ export default function Page() {
                           type="number"
                           value={custom.amountUsd}
                           onChange={(e) => setCustom({ ...custom, amountUsd: Number(e.target.value) })}
-                          className="mono w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-emerald-400/50"
+                          className="mono w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12.5px] outline-none focus:border-white/30"
                         />
                       </div>
                       <div className="col-span-1 flex items-end">
@@ -1027,7 +1030,7 @@ export default function Page() {
                         value={playbookDraft ?? state.playbook}
                         onChange={(e) => setPlaybookDraft(e.target.value)}
                         rows={6}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-[12px] leading-relaxed outline-none focus:border-emerald-400/50"
+                        className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-[12px] leading-relaxed outline-none focus:border-white/30"
                       />
                       <button
                         onClick={() => {
@@ -1052,9 +1055,9 @@ export default function Page() {
                         key={o.id}
                         onClick={() => setSelectedId(o.id)}
                         className={
-                          'w-full rounded-xl border p-3 text-left transition-colors ' +
+                          'tap w-full rounded-xl border p-3 text-left transition-colors ' +
                           (selectedId === o.id
-                            ? 'border-emerald-400/40 bg-emerald-400/5'
+                            ? 'border-white/25 bg-white/[0.04]'
                             : 'border-white/8 bg-white/[0.02] hover:border-white/20')
                         }
                       >
@@ -1064,7 +1067,7 @@ export default function Page() {
                             className={
                               'mono shrink-0 text-[11px] ' +
                               (o.status === 'greenlight' || o.status === 'review'
-                                ? 'text-emerald-300'
+                                ? 'text-zinc-100'
                                 : 'pulse-soft text-amber-300')
                             }
                           >
@@ -1077,7 +1080,7 @@ export default function Page() {
                         {o.status === 'producing' && (
                           <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-white/10">
                             <div
-                              className="h-full rounded-full bg-emerald-400 transition-all"
+                              className="h-full rounded-full bg-zinc-100 transition-all"
                               style={{ width: `${o.videoProgress ?? 2}%` }}
                             />
                           </div>
@@ -1126,7 +1129,7 @@ export default function Page() {
                       margin {(((o.amountUsd - o.cogsUsd) / o.amountUsd) * 100).toFixed(1)}%
                     </div>
                   </div>
-                  <div className="mono shrink-0 text-[12.5px] font-semibold text-emerald-400">{money(o.amountUsd)}</div>
+                  <div className="mono shrink-0 text-[12.5px] font-semibold text-zinc-100">{money(o.amountUsd)}</div>
                 </div>
               ))}
               {shipped.length === 0 && <div className="text-[12.5px] text-zinc-600">No invoices yet.</div>}
@@ -1136,12 +1139,40 @@ export default function Page() {
       </section>
 
       <footer className="border-t border-white/5">
-        <div className="mx-auto flex max-w-[1440px] flex-col items-start justify-between gap-2 px-6 py-8 text-[11.5px] text-zinc-600 md:flex-row md:items-center">
-          <span>
-            OPC formula, implemented: Human Experience is the Playbook, the AI Loop is concepts
-            plus jury plus render, Human Review gates the spend and releases escrow.
-          </span>
-          <span className="mono">BUIDL_OPC_Hackathon_SG / 2026-07-12</span>
+        <div className="mx-auto max-w-[1440px] px-6 py-10">
+          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <div className="display text-[15px] font-semibold">Aria Studio</div>
+              <div className="mt-1 text-[11.5px] text-zinc-600">
+                A one-person media production company, operated on RelayDance infrastructure.
+              </div>
+            </div>
+            <div className="mono flex flex-col gap-1 text-[11.5px] text-zinc-500 md:items-end">
+              <a href="mailto:aria@relaydance.com" className="hover:text-zinc-200">
+                aria@relaydance.com
+              </a>
+              <span>
+                <a href="https://relaydance.com" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
+                  relaydance.com
+                </a>
+                {' / '}
+                <a href="https://relayrouter.io" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
+                  relayrouter.io
+                </a>
+                {' / '}
+                <a href="https://github.com/alertcat/aria-studio" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
+                  GitHub
+                </a>
+              </span>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-col items-start justify-between gap-2 border-t border-white/5 pt-4 text-[11px] text-zinc-700 md:flex-row md:items-center">
+            <span>
+              OPC formula, implemented: Human Experience is the Playbook, the AI Loop is concepts
+              plus jury plus render, Human Review gates the spend and releases escrow.
+            </span>
+            <span className="mono">Born at BUIDL_OPC_Hackathon_SG, Singapore / 2026 Aria Studio</span>
+          </div>
         </div>
       </footer>
     </div>
