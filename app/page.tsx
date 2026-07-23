@@ -621,30 +621,19 @@ export default function Page() {
               img: '/media/journal-jury.png',
               title: 'Why juries beat scores',
               sub: 'Pairwise duels and Bradley-Terry, the mechanism that won an Ethereum Foundation contest, now running creative QA.',
-              href: 'https://github.com/alertcat/aria-studio/blob/main/PITCH.md',
             },
             {
               img: '/media/journal-gate.png',
               title: 'Two gates, where money moves',
               sub: 'Greenlight funds the render. Acceptance releases escrow. Human judgment sits exactly on the spend.',
-              href: 'https://github.com/alertcat/aria-studio/blob/main/README.md',
             },
             {
               img: '/media/journal-infra.png',
               title: 'Rendering at wholesale',
               sub: 'The studio runs on in-house render infrastructure, so the margin funds taste, not compute.',
-              href: 'https://github.com/alertcat/aria-studio/blob/main/README.md',
             },
           ].map((j, i) => (
-            <motion.a
-              key={j.title}
-              {...inView(i * 0.07)}
-              whileTap={reduce ? undefined : { scale: 0.98 }}
-              href={j.href}
-              target="_blank"
-              rel="noreferrer"
-              className="group block tap"
-            >
+            <motion.div key={j.title} {...inView(i * 0.07)} className="group">
               <div className="hover-lift overflow-hidden rounded-2xl border border-white/10">
                 <img
                   src={j.img}
@@ -654,7 +643,7 @@ export default function Page() {
               </div>
               <div className="display mt-3 text-[18px] font-semibold leading-snug">{j.title}</div>
               <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-500">{j.sub}</p>
-            </motion.a>
+            </motion.div>
           ))}
         </div>
       </section>
@@ -902,14 +891,6 @@ export default function Page() {
                         Open the live control room
                       </a>
                     )}
-                    <a
-                      href="https://github.com/alertcat/aria-studio"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn-ghost inline-block rounded-full px-4 py-2 text-[12px] font-medium"
-                    >
-                      View source on GitHub
-                    </a>
                   </div>
                 </div>
               ) : (
@@ -1149,8 +1130,8 @@ export default function Page() {
                 aria@relaydance.com
               </a>
               <span>
-                <a href="https://github.com/alertcat/aria-studio" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
-                  GitHub
+                <a href="https://relaydance.com" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
+                  relaydance.com
                 </a>
               </span>
             </div>
