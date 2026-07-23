@@ -196,7 +196,7 @@ export default function StudioPage() {
           <span>
             shipped <span className="text-zinc-100">{state.delivered}</span>
           </span>
-          <span className="rounded-full border border-white/15 px-2.5 py-0.5 text-zinc-200">CEO {data.company.ceo}</span>
+          
         </div>
       </header>
 

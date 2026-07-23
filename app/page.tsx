@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, useReducedMotion, useMotionValue, useTransform, animate, AnimatePresence } from 'motion/react'
@@ -296,9 +296,6 @@ export default function Page() {
             </span>
             <span className="hidden text-zinc-400 sm:inline">
               margin <span className="font-medium text-zinc-100">{grossMargin ? `${grossMargin}%` : '--'}</span>
-            </span>
-            <span className="rounded-full border border-white/15 px-3 py-1 text-zinc-200">
-              CEO {data.company.ceo}
             </span>
             {STUDIO_HREF && (
               <a href={STUDIO_HREF} className="btn-primary rounded-full px-3.5 py-1.5 text-[12px] font-semibold">
@@ -604,7 +601,7 @@ export default function Page() {
               </p>
             </div>
             <div className="mono mt-4 text-[11.5px] text-zinc-500">
-              claude-sonnet-5 on the founder&apos;s own relay
+              claude-sonnet-5, in-house relay
             </div>
           </motion.div>
         </div>
@@ -635,7 +632,7 @@ export default function Page() {
             {
               img: '/media/journal-infra.png',
               title: 'Rendering at wholesale',
-              sub: 'The studio consumes its founder鈥檚 own relay infrastructure, so the margin funds taste, not compute.',
+              sub: 'The studio runs on in-house render infrastructure, so the margin funds taste, not compute.',
               href: 'https://github.com/alertcat/aria-studio/blob/main/README.md',
             },
           ].map((j, i) => (
@@ -1144,7 +1141,7 @@ export default function Page() {
             <div>
               <div className="display text-[15px] font-semibold">Aria Studio</div>
               <div className="mt-1 text-[11.5px] text-zinc-600">
-                A one-person media production company, operated on RelayDance infrastructure.
+                An independent one-person media production company.
               </div>
             </div>
             <div className="mono flex flex-col gap-1 text-[11.5px] text-zinc-500 md:items-end">
@@ -1152,14 +1149,6 @@ export default function Page() {
                 aria@relaydance.com
               </a>
               <span>
-                <a href="https://relaydance.com" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
-                  relaydance.com
-                </a>
-                {' / '}
-                <a href="https://relayrouter.io" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
-                  relayrouter.io
-                </a>
-                {' / '}
                 <a href="https://github.com/alertcat/aria-studio" target="_blank" rel="noreferrer" className="hover:text-zinc-200">
                   GitHub
                 </a>

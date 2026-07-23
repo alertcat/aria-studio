@@ -88,7 +88,7 @@ export type State = {
 
 export const COMPANY = {
   name: 'Aria Studio',
-  ceo: 'alertcat',
+  ceo: 'founder',
   vertical: 'a solo performance: one human, an ensemble of agents, real footage, real invoices',
 }
 
