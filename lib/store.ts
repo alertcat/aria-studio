@@ -3,7 +3,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { bradleyTerry, type Comparison } from './bt'
 import { chatOpenAI, chatClaude, reliable, cacheKey } from './llm'
-import { generateVideo, VIDEO_MODEL_MINI } from './video'
+import { generateVideo, VIDEO_MODEL_MINI, fetchVideoResult } from './video'
 import { generateImage } from './image'
 import { chainEnabled, settleUsdc } from './chain'
 import { startEscrowWatch } from './escrowWatch'
@@ -73,6 +73,9 @@ export type Order = {
   posterFile?: string
   talentId?: string
   talentAsset?: string
+  /** upstream task id, kept so an interrupted render can be fetched without paying again */
+  videoTaskId?: string
+  videoInterrupted?: boolean
   feedback?: string
   invoice?: { id: string; paidAt: number; ref: string }
   error?: string
@@ -103,6 +106,22 @@ export const UNIT_COSTS = {
   render: 0.25, // seedance 2.0 mini, 5s 720p vertical
   poster: 0.02, // gpt-image-2 campaign poster
 }
+
+// What a pilot customer is pre-charged on their own RelayDance balance, using the
+// same formula the RelayDance playground shows before submit:
+// tokens = duration * W * H * 24 / 1024, seedance mini t2v rate 3.5 USD per M tokens,
+// retail markup 1.25. Settled to actual output on completion, failed tasks refunded.
+function estimateRenderUsd(durationS = 5, w = 1280, h = 720, ratePerM = 3.5, markup = 1.25) {
+  const tokens = (durationS * w * h * 24) / 1024
+  return Math.round(((tokens * ratePerM) / 1_000_000) * markup * 100) / 100
+}
+export const PILOT_ESTIMATE = {
+  renderUsd: estimateRenderUsd(),
+  posterUsd: 0.05,
+}
+
+const INTERRUPTED_NOTE = 'Render interrupted by a restart. Fetch the finished clip below, no new charge.'
+const TIMEOUT_NOTE = 'Render is taking longer than expected upstream. Fetch the finished clip below when ready, no new charge.'
 
 const DEFAULT_PLAYBOOK = `1. First frame hooks in half a second. No slow fades, no logo intros.
 2. One idea per spot. If the concept needs a sentence of explanation, kill it.
@@ -198,6 +217,11 @@ export function makeStore(tenant: Tenant) {
 const DATA_DIR = tenant.dataDir
 const STATE_PATH = path.join(DATA_DIR, 'state.json')
 const MEDIA_DIR = tenant.mediaDir
+// Cost booked per order: in pilot it is what the customer's balance is charged
+// (concepts and jury are on the house), in demo it is the studio's COGS story.
+const COST = PILOT
+  ? { concepts: 0, jury: 0, render: PILOT_ESTIMATE.renderUsd, poster: PILOT_ESTIMATE.posterUsd }
+  : UNIT_COSTS
 
 type Store = {
   state: State
@@ -223,7 +247,16 @@ function createStore(): Store {
       store.state = { ...freshState(), ...disk.state }
       for (const o of store.state.orders) {
         if (['concepting', 'jury', 'producing', 'revising'].includes(o.status)) {
-          o.status = o.drafts?.length === 3 && o.ranking?.length ? 'greenlight' : 'inbox'
+          if (o.videoTaskId && !o.videoFile) {
+            // the upstream task keeps running and is already paid for: keep the
+            // order in producing and let the customer fetch the result
+            o.status = 'producing'
+            o.videoInterrupted = true
+            o.videoProgress = undefined
+            o.videoNote = INTERRUPTED_NOTE
+          } else {
+            o.status = o.drafts?.length === 3 && o.ranking?.length ? 'greenlight' : 'inbox'
+          }
         }
       }
       if (disk.agents) {
@@ -446,7 +479,7 @@ async function runJury(o: Order) {
     }))
     .sort((x, y) => y.score - x.score)
 
-  o.cogsUsd += UNIT_COSTS.concepts + UNIT_COSTS.jury
+  o.cogsUsd += COST.concepts + COST.jury
   o.status = 'greenlight'
   ev(
     'RANK',
@@ -456,9 +489,13 @@ async function runJury(o: Order) {
   saveSoon()
 }
 
-function greenlightOrder(orderId: string, agentId?: string, talentId?: string) {
+function greenlightOrder(orderId: string, agentId?: string, talentId?: string, apiKey?: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || o.status !== 'greenlight') return
+  if (PILOT && !apiKey) {
+    ev('ERR', 'Render refused: the request carried no customer key', o.id)
+    return
+  }
   const pick = agentId && o.drafts.some((d) => d.agentId === agentId) ? agentId : o.ranking[0].agentId
   o.winnerAgentId = pick
   o.talentId = talentId && TALENTS.some((t) => t.id === talentId) ? talentId : undefined
@@ -470,14 +507,16 @@ function greenlightOrder(orderId: string, agentId?: string, talentId?: string) {
     o.id,
   )
   saveSoon()
-  void runProduction(o)
+  void runProduction(o, apiKey)
 }
 
-async function runProduction(o: Order) {
+async function runProduction(o: Order, apiKey?: string) {
   const winner = o.drafts.find((d) => d.agentId === o.winnerAgentId)!
   o.status = 'producing'
   o.videoProgress = 0
   o.videoNote = undefined
+  o.videoTaskId = undefined
+  o.videoInterrupted = undefined
   ev('PROD', `Studio rendering "${winner.concept.concept}" (Seedance 2.0 mini, 5s vertical) plus campaign poster (gpt-image-2)`, o.id)
   saveSoon()
 
@@ -496,9 +535,9 @@ async function runProduction(o: Order) {
       return
     }
     try {
-      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName), { apiKey: tenant.relaydanceKey })
+      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName), { apiKey })
       o.posterFile = `/m/${posterName}`
-      o.cogsUsd += UNIT_COSTS.poster
+      o.cogsUsd += COST.poster
       writeMediaCache(pKey, posterName)
       ev('IMG', `Campaign poster ready (gpt-image-2)`, o.id)
     } catch (e) {
@@ -525,7 +564,7 @@ async function runProduction(o: Order) {
     let referenceAssets: string[] | undefined
     if (o.talentId) {
       try {
-        const uri = await talentAssetUri(o.talentId, { apiKey: tenant.relaydanceKey, dataDir: DATA_DIR })
+        const uri = await talentAssetUri(o.talentId, { apiKey, dataDir: DATA_DIR })
         o.talentAsset = uri
         referenceAssets = [uri]
         const t = TALENTS.find((x) => x.id === o.talentId)!
@@ -551,11 +590,22 @@ async function runProduction(o: Order) {
         }
         saveSoon()
       },
-      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_MINI, maxWaitS: 480, referenceAssets, apiKey: tenant.relaydanceKey },
+      {
+        duration: 5,
+        ratio: '9:16',
+        model: VIDEO_MODEL_MINI,
+        maxWaitS: 480,
+        referenceAssets,
+        apiKey,
+        onTask: (id) => {
+          o.videoTaskId = id
+          saveSoon()
+        },
+      },
     )
     o.videoFile = `/m/${videoName}`
     o.videoProgress = 100
-    o.cogsUsd += UNIT_COSTS.render
+    o.cogsUsd += COST.render
     writeMediaCache(vKey, videoName)
   })()
 
@@ -564,11 +614,20 @@ async function runProduction(o: Order) {
     o.status = 'review'
     ev('GATE', `Cut and key visual are on the CEO desk for final acceptance`, o.id)
   } catch (e) {
-    console.error('[video] render failed:', (e as Error).message)
-    o.videoNote = `Render failed (${(e as Error).message.slice(0, 80)}). Concept and poster ready for review.`
-    o.videoProgress = undefined
-    o.status = 'review'
-    ev('ERR', `Render failed for "${o.title}", sent to gate without footage`, o.id)
+    const msg = (e as Error).message
+    console.error('[video] render failed:', msg)
+    if (o.videoTaskId && !o.videoFile && /timeout/i.test(msg)) {
+      o.videoInterrupted = true
+      o.videoNote = TIMEOUT_NOTE
+      o.videoProgress = undefined
+      o.status = 'producing'
+      ev('ERR', `Render for "${o.title}" is still running upstream; fetch it later, no new charge`, o.id)
+    } else {
+      o.videoNote = `Render failed (${msg.slice(0, 80)}). Concept and poster ready for review.${PILOT ? ' Failed tasks are refunded by RelayDance.' : ''}`
+      o.videoProgress = undefined
+      o.status = 'review'
+      ev('ERR', `Render failed for "${o.title}", sent to gate without footage`, o.id)
+    }
   }
   saveSoon()
 }
@@ -616,9 +675,10 @@ async function runPipeline(orderId: string) {
   }
 }
 
-async function runRevision(orderId: string, feedback: string) {
+async function runRevision(orderId: string, feedback: string, apiKey?: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || !o.winnerAgentId) return
+  if (PILOT && !apiKey) return
   try {
     o.status = 'revising'
     o.revision += 1
@@ -646,14 +706,54 @@ async function runRevision(orderId: string, feedback: string) {
     prev.concept = parseConcept(content, w, o)
     prev.revised = true
     prev.cached = cached
-    o.cogsUsd += UNIT_COSTS.concepts / 3
+    o.cogsUsd += COST.concepts / 3
     ev(w.tag, `${w.name} delivered revised concept "${prev.concept.concept}", re-rendering`, o.id)
     saveSoon()
-    await runProduction(o)
+    await runProduction(o, apiKey)
   } catch (e) {
     o.status = 'review'
     o.error = (e as Error).message
     saveSoon()
+  }
+}
+
+/** Fetch an interrupted render's result from upstream. Nothing new is submitted, so nothing new is charged. */
+async function resumeRender(orderId: string, apiKey?: string): Promise<{ ok: boolean; status: string; note?: string }> {
+  const o = S.state.orders.find((x) => x.id === orderId)
+  if (!o) return { ok: false, status: 'not found' }
+  if (!o.videoTaskId || o.videoFile) return { ok: false, status: 'nothing to resume' }
+  if (PILOT && !apiKey) return { ok: false, status: 'key required' }
+  const videoName = `${o.id}_r${o.revision}.mp4`
+  try {
+    const r = await fetchVideoResult(o.videoTaskId, path.join(MEDIA_DIR, videoName), apiKey)
+    if (r.status === 'completed') {
+      o.videoFile = `/m/${videoName}`
+      o.videoProgress = 100
+      o.videoNote = undefined
+      o.videoInterrupted = undefined
+      o.cogsUsd += COST.render
+      o.status = 'review'
+      writeMediaCache(cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? ''), videoName)
+      ev('PROD', `Fetched the finished render for "${o.title}" from upstream, no new charge`, o.id)
+      ev('GATE', `Cut is on the CEO desk for final acceptance`, o.id)
+    } else if (r.status === 'failed') {
+      o.videoNote = 'Upstream render failed and was refunded. Approve again to re-render.'
+      o.videoInterrupted = undefined
+      o.videoTaskId = undefined
+      o.videoProgress = undefined
+      o.status = 'greenlight'
+      ev('ERR', `Upstream render for "${o.title}" failed (refunded), back at the greenlight gate`, o.id)
+    } else {
+      o.videoNote = `Still rendering upstream (${r.progress}%). Try again in a minute.`
+      ev('PROD', `Upstream render for "${o.title}" at ${r.progress}%`, o.id)
+    }
+    saveSoon()
+    return { ok: true, status: r.status, note: o.videoNote }
+  } catch (e) {
+    const msg = (e as Error).message
+    o.videoNote = `Could not fetch the render (${msg.slice(0, 80)}). Try again, or approve to re-render.`
+    saveSoon()
+    return { ok: false, status: 'error', note: o.videoNote }
   }
 }
 
@@ -749,12 +849,14 @@ function publicState() {
     judges: JUDGES.map((j) => j.name),
     templates: TEMPLATES,
     unitCosts: UNIT_COSTS,
+    estimate: PILOT_ESTIMATE,
     talents: TALENTS,
   }
 }
 
-  function warm() {
-    return warmTalents({ apiKey: tenant.relaydanceKey, dataDir: DATA_DIR })
+  function warm(apiKey?: string) {
+    if (PILOT && !apiKey) throw new Error('key required')
+    return warmTalents({ apiKey, dataDir: DATA_DIR })
   }
 
   return {
@@ -764,6 +866,7 @@ function publicState() {
     greenlightOrder,
     runPipeline,
     runRevision,
+    resumeRender,
     approveOrder,
     createOrder,
     resetCompany,

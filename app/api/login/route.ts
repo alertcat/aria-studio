@@ -1,19 +1,21 @@
-import { createSession, sessionCookie, validateRelaydanceKey, PILOT, tenantIdFor } from '@/lib/tenant'
+import { tenantCookie, validateRelaydanceKey, keyFromRequest, relaydanceBalance, PILOT, tenantIdFor } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// Pilot login: the customer's RelayDance API key is the account. Renders bill to their balance.
+// Pilot login: the customer's RelayDance API key is the account. It arrives in
+// the Authorization header, is checked against RelayDance, and is not kept: the
+// cookie only carries a signed tenant id.
 export async function POST(req: Request) {
   if (!PILOT) return Response.json({ ok: true, demo: true })
-  const body = await req.json().catch(() => ({}))
-  const key = String(body.key || '').trim()
-  if (!(await validateRelaydanceKey(key))) {
+  const key = keyFromRequest(req)
+  if (!key || !(await validateRelaydanceKey(key))) {
     return Response.json({ error: 'invalid key' }, { status: 401 })
   }
-  const sid = createSession(key)
-  return new Response(JSON.stringify({ ok: true, tenant: tenantIdFor(key) }), {
+  const id = tenantIdFor(key)
+  const balance = await relaydanceBalance(key)
+  return new Response(JSON.stringify({ ok: true, tenant: id, balance }), {
     status: 200,
-    headers: { 'Content-Type': 'application/json', 'Set-Cookie': sessionCookie(sid) },
+    headers: { 'Content-Type': 'application/json', 'Set-Cookie': tenantCookie(id) },
   })
 }

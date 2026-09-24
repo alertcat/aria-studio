@@ -56,6 +56,8 @@ type Order = {
   videoNote?: string
   posterFile?: string
   talentId?: string
+  videoTaskId?: string
+  videoInterrupted?: boolean
   talentAsset?: string
   invoice?: { id: string; paidAt: number; ref: string }
 }
@@ -70,6 +72,7 @@ type ApiState = {
   unitCosts: Record<string, number>
   talents: Talent[]
   tenant?: { id: string; pilot: boolean }
+  estimate?: { renderUsd: number; posterUsd: number }
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -126,6 +129,10 @@ export default function StudioPage() {
   const [loginKey, setLoginKey] = useState('')
   const [loginErr, setLoginErr] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
+  const keyRef = useRef<string>('')
+  const [balance, setBalance] = useState<{ remainingUsd: number; usedUsd: number } | null>(null)
+  const [keyHint, setKeyHint] = useState('')
+  const [notice, setNotice] = useState('')
   const [playbookDraft, setPlaybookDraft] = useState<string | null>(null)
   const [custom, setCustom] = useState({
     client: '',
@@ -136,6 +143,36 @@ export default function StudioPage() {
   })
   const selectedRef = useRef<string | null>(null)
   selectedRef.current = selectedId
+
+  // The customer's key lives only in this browser session (sessionStorage) and
+  // is attached only to the requests that spend their balance. The server never
+  // stores it.
+  const loadKey = () => {
+    if (!keyRef.current) {
+      try {
+        keyRef.current = sessionStorage.getItem('aria_key') || ''
+      } catch {
+        /* storage unavailable */
+      }
+    }
+    return keyRef.current
+  }
+  const authHeaders = (): Record<string, string> => {
+    const k = loadKey()
+    return k ? { Authorization: `Bearer ${k}` } : {}
+  }
+  const refreshBalance = async () => {
+    if (!loadKey()) return
+    try {
+      const r = await fetch('/api/balance', { headers: authHeaders(), cache: 'no-store' })
+      if (r.ok) {
+        const j = await r.json()
+        if (j.balance) setBalance(j.balance)
+      }
+    } catch {
+      /* transient */
+    }
+  }
 
   const poll = useCallback(async () => {
     try {
@@ -168,26 +205,67 @@ export default function StudioPage() {
     return () => clearInterval(id)
   }, [poll])
 
-  const post = async (url: string, body?: unknown) => {
-    await fetch(url, {
+  const pilotMode = !!data?.tenant?.pilot
+  useEffect(() => {
+    if (!pilotMode) return
+    refreshBalance()
+    const id = setInterval(refreshBalance, 45000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pilotMode])
+
+  const post = async (url: string, body?: unknown, spend = false) => {
+    const pilotNow = !!data?.tenant?.pilot
+    if (spend && pilotNow && !loadKey()) {
+      setKeyHint(tr(lang, 'Enter your key again to continue. It is only kept in this browser session.'))
+      setNeedLogin(true)
+      return
+    }
+    const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(spend ? authHeaders() : {}) },
       body: body ? JSON.stringify(body) : '{}',
     })
+    if (r.status === 401 && pilotNow) {
+      setKeyHint(tr(lang, 'Enter your key again to continue. It is only kept in this browser session.'))
+      setNeedLogin(true)
+      return
+    }
+    if (r.status === 402) {
+      const j = await r.json().catch(() => ({}))
+      setNotice(
+        `${tr(lang, 'Insufficient RelayDance balance')}: $${Number(j.remainingUsd ?? 0).toFixed(2)} < $${Number(j.needUsd ?? 0).toFixed(2)}`,
+      )
+    } else if (r.status === 403) {
+      setNotice(tr(lang, 'This key does not match the current session. Log out and sign in again.'))
+    } else {
+      setNotice('')
+    }
     poll()
+    if (spend) refreshBalance()
   }
 
   const doLogin = async () => {
     setLoggingIn(true)
     setLoginErr('')
+    const k = loginKey.trim()
     const r = await fetch('/api/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: loginKey.trim() }),
+      headers: { Authorization: `Bearer ${k}` },
     })
     setLoggingIn(false)
     if (r.ok) {
+      keyRef.current = k
+      try {
+        sessionStorage.setItem('aria_key', k)
+      } catch {
+        /* storage unavailable */
+      }
+      const j = await r.json().catch(() => ({}))
+      if (j.balance) setBalance(j.balance)
       setLoginKey('')
+      setKeyHint('')
+      setNeedLogin(false)
       poll()
     } else {
       setLoginErr(tr(lang, 'Invalid key. Check it in your RelayDance console.'))
@@ -212,8 +290,12 @@ export default function StudioPage() {
           </div>
           <div className="mt-5 text-[15px] font-medium">{tr(lang, 'Sign in with your RelayDance API key')}</div>
           <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">
-            {tr(lang, 'Your renders bill to your own RelayDance balance. Orders, talents and footage stay private to your key.')}
+            {tr(
+              lang,
+              'Your key stays in this browser session only and is cleared when you close it. The server never stores it: it is used once, in the moment you approve a render, and billing is settled by RelayDance at your account rates.',
+            )}
           </p>
+          {keyHint && <div className="mt-2 text-[12px] text-amber-300">{keyHint}</div>}
           <input
             type="password"
             value={loginKey}
@@ -257,6 +339,8 @@ export default function StudioPage() {
   const pilot = !!data.tenant?.pilot
   const estSpend = orders.reduce((a, o) => a + (o.cogsUsd || 0), 0)
   const T = (k: string) => tr(lang, k)
+  const est = data.estimate ?? { renderUsd: 0.47, posterUsd: 0.05 }
+  const preCharge = (est.renderUsd + est.posterUsd).toFixed(2)
   const selectedEvents = selected ? state.events.filter((e) => e.orderId === selected.id) : []
 
   return (
@@ -291,6 +375,12 @@ export default function StudioPage() {
               <span>
                 {T('est. spend')} <span className="text-zinc-100">${estSpend.toFixed(2)}</span>
               </span>
+              {balance && (
+                <span>
+                  {T('balance')} <span className="text-zinc-100">${balance.remainingUsd.toFixed(2)}</span>
+                </span>
+              )}
+              {notice && <span className="text-red-400">{notice}</span>}
             </>
           ) : (
             <>
@@ -317,6 +407,13 @@ export default function StudioPage() {
           {pilot && (
             <button
               onClick={async () => {
+                keyRef.current = ''
+                try {
+                  sessionStorage.removeItem('aria_key')
+                } catch {
+                  /* storage unavailable */
+                }
+                setBalance(null)
                 await fetch('/api/logout', { method: 'POST' })
                 setData(null)
                 setNeedLogin(true)
@@ -562,7 +659,9 @@ export default function StudioPage() {
               {selected.status === 'greenlight' && (
                 <div className="mt-4">
                   <div className="mono mb-2 text-[11px] text-zinc-200">
-                    {T('GATE 1 / pick the concept to fund. Concepts cost cents, the render costs about $0.27.')}
+                    {pilot
+                      ? `${T('GATE 1 / pick the concept to render.')} ${T('Approving pre-charges about')} $${preCharge} ${T('to your RelayDance balance, settled to actual output on completion; failed renders are refunded in full.')}`
+                      : T('GATE 1 / pick the concept to fund. Concepts cost cents, the render costs about $0.27.')}
                   </div>
                   <div className="card-quiet mb-3 p-3">
                     <div className="flex items-baseline justify-between">
@@ -645,7 +744,7 @@ export default function StudioPage() {
                             {(r.score * 100).toFixed(0)}% / {r.wins}W
                           </div>
                           <button
-                            onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId, talentId: talentId || undefined })}
+                            onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId, talentId: talentId || undefined }, true)}
                             className={
                               'mt-3 w-full rounded-lg px-3 py-2 text-[12px] font-semibold ' +
                               (idx === 0 ? 'btn-primary' : 'btn-ghost')
@@ -693,10 +792,18 @@ export default function StudioPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="card-quiet flex aspect-[9/16] items-center justify-center p-4 text-center">
+                      <div className="card-quiet flex aspect-[9/16] flex-col items-center justify-center gap-2 p-4 text-center">
                         <span className="mono text-[10.5px] text-amber-300/80">
-                          {selected.videoNote ?? T(STATUS_LABEL[selected.status])}
+                          {selected.videoNote ? T(selected.videoNote) : T(STATUS_LABEL[selected.status])}
                         </span>
+                        {selected.videoTaskId && !selected.videoFile && (
+                          <button
+                            onClick={() => post('/api/resume', { orderId: selected.id }, true)}
+                            className="btn-ghost rounded-full px-3 py-1 text-[11px]"
+                          >
+                            {T('Fetch finished render')}
+                          </button>
+                        )}
                       </div>
                     )}
                     {selected.posterFile && (
@@ -749,7 +856,7 @@ export default function StudioPage() {
                     {selected.status === 'review' && (
                       <div className="mt-3">
                         <div className="mono mb-1.5 text-[11px] text-zinc-200">
-                          {pilot ? T('GATE 2 / accept to deliver, send back to revise') : T('GATE 2 / your acceptance releases the escrow')}
+                          {pilot ? `${T('GATE 2 / accept to deliver, send back to revise')} ${T('A revision renders again, about')} $${preCharge}.` : T('GATE 2 / your acceptance releases the escrow')}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -767,7 +874,7 @@ export default function StudioPage() {
                           />
                           <button
                             onClick={() => {
-                              post('/api/review', { orderId: selected.id, action: 'revise', feedback: feedbackText })
+                              post('/api/review', { orderId: selected.id, action: 'revise', feedback: feedbackText }, true)
                               setFeedbackText('')
                             }}
                             className="btn-ghost flex items-center gap-1 rounded-lg px-3 py-2 text-[12px] font-medium"

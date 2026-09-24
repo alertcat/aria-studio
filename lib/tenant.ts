@@ -2,19 +2,20 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 
-// Multi-tenant pilot: a tenant is identified by the customer's own RelayDance
-// API key. Renders bill to their balance; their orders, talents and media live
-// under DATA_ROOT/tenants/<id>. In demo mode (ARIA_MODE unset) there is a single
-// "default" tenant that keeps the original on-disk layout.
+// Multi-tenant pilot. The customer's RelayDance API key is their identity and
+// their wallet, so it is never written to disk on the server: the browser keeps
+// it in sessionStorage (gone when the tab closes) and sends it only with the
+// requests that spend money. The cookie carries a signed tenant id and nothing
+// that could be charged. Demo mode (ARIA_MODE unset) keeps a single "default"
+// tenant that uses the server's own key from the environment.
 
 export const PILOT = process.env.ARIA_MODE === 'pilot'
 export const DATA_ROOT = process.env.DATA_ROOT || path.join(process.cwd(), 'data')
-const SESSIONS_PATH = path.join(DATA_ROOT, 'sessions.json')
-const COOKIE = 'aria_session'
+const COOKIE = 'aria_tenant'
+const COOKIE_TTL_S = 60 * 60 * 12
 
 export type Tenant = {
   id: string
-  relaydanceKey?: string
   dataDir: string
   mediaDir: string
   mediaUrlBase: string
@@ -27,49 +28,40 @@ export function tenantIdFor(key: string) {
 export function defaultTenant(): Tenant {
   return {
     id: 'default',
-    relaydanceKey: process.env.RELAYDANCE_API_KEY,
     dataDir: path.join(process.cwd(), 'data'),
     mediaDir: path.join(process.cwd(), 'public', 'media'),
     mediaUrlBase: '/m',
   }
 }
 
-export function tenantForKey(key: string): Tenant {
-  const id = tenantIdFor(key)
+export function tenantById(id: string): Tenant {
+  if (!/^[a-f0-9]{16}$/.test(id)) throw new Error('bad tenant id')
   const dataDir = path.join(DATA_ROOT, 'tenants', id)
   const mediaDir = path.join(dataDir, 'media')
   fs.mkdirSync(mediaDir, { recursive: true })
-  return { id, relaydanceKey: key, dataDir, mediaDir, mediaUrlBase: '/m' }
+  return { id, dataDir, mediaDir, mediaUrlBase: '/m' }
 }
 
-// ---------- sessions (server-side map, cookie carries only an opaque id) ----------
+// ---------- signed tenant cookie (no secrets inside) ----------
 
-type SessionMap = Record<string, { key: string; createdAt: number }>
+const SECRET =
+  process.env.ARIA_COOKIE_SECRET ||
+  (() => {
+    if (PILOT) console.warn('[tenant] ARIA_COOKIE_SECRET is unset: sessions will not survive a restart')
+    return crypto.randomBytes(32).toString('hex')
+  })()
 
-function readSessions(): SessionMap {
-  try {
-    return JSON.parse(fs.readFileSync(SESSIONS_PATH, 'utf-8'))
-  } catch {
-    return {}
-  }
-}
-function writeSessions(m: SessionMap) {
-  fs.mkdirSync(DATA_ROOT, { recursive: true })
-  fs.writeFileSync(SESSIONS_PATH, JSON.stringify(m, null, 1))
+function sign(payload: string) {
+  return crypto.createHmac('sha256', SECRET).update(payload).digest('base64url')
 }
 
-export function createSession(key: string): string {
-  const sid = crypto.randomBytes(24).toString('base64url')
-  const m = readSessions()
-  m[sid] = { key, createdAt: Date.now() }
-  writeSessions(m)
-  return sid
-}
-
-export function destroySession(sid: string) {
-  const m = readSessions()
-  delete m[sid]
-  writeSessions(m)
+export function tenantCookie(id: string, clear = false) {
+  const exp = Math.floor(Date.now() / 1000) + COOKIE_TTL_S
+  const payload = `${id}.${exp}`
+  const value = clear ? '' : `${payload}.${sign(payload)}`
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
+  const base = `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax${secure}`
+  return clear ? `${base}; Max-Age=0` : `${base}; Max-Age=${COOKIE_TTL_S}`
 }
 
 function cookieValue(req: Request, name: string): string | undefined {
@@ -81,22 +73,38 @@ function cookieValue(req: Request, name: string): string | undefined {
   return undefined
 }
 
-export function sessionCookie(sid: string, clear = false) {
-  const base = `${COOKIE}=${clear ? '' : sid}; Path=/; HttpOnly; SameSite=Lax`
-  return clear ? `${base}; Max-Age=0` : `${base}; Max-Age=${60 * 60 * 24 * 30}`
+export function tenantIdFromCookie(req: Request): string | null {
+  const v = cookieValue(req, COOKIE)
+  if (!v) return null
+  const [id, exp, sig] = v.split('.')
+  if (!id || !exp || !sig) return null
+  const expect = sign(`${id}.${exp}`)
+  if (sig.length !== expect.length) return null
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expect))) return null
+  if (Number(exp) < Date.now() / 1000) return null
+  return id
 }
 
 /** Resolve the tenant for a request. Demo mode always returns the default tenant. */
 export function tenantFromRequest(req: Request): Tenant | null {
   if (!PILOT) return defaultTenant()
-  const sid = cookieValue(req, COOKIE)
-  if (!sid) return null
-  const s = readSessions()[sid]
-  if (!s) return null
-  return tenantForKey(s.key)
+  const id = tenantIdFromCookie(req)
+  if (!id) return null
+  try {
+    return tenantById(id)
+  } catch {
+    return null
+  }
 }
 
-/** Validate a RelayDance key by listing models with it. */
+/** The customer's key travels only in the Authorization header of spending requests. */
+export function keyFromRequest(req: Request): string | null {
+  const h = (req.headers.get('authorization') || '').trim()
+  const m = /^Bearer\s+(sk-[A-Za-z0-9]{20,})$/.exec(h)
+  return m ? m[1] : null
+}
+
+/** Validate a RelayDance key by listing models with it (free call). */
 export async function validateRelaydanceKey(key: string): Promise<boolean> {
   if (!/^sk-[A-Za-z0-9]{20,}$/.test(key)) return false
   try {
@@ -107,5 +115,27 @@ export async function validateRelaydanceKey(key: string): Promise<boolean> {
     return r.status === 200
   } catch {
     return false
+  }
+}
+
+export type Balance = { remainingUsd: number; usedUsd: number }
+
+/** Remaining balance for a key, from the OpenAI-style billing endpoints RelayDance exposes. */
+export async function relaydanceBalance(key: string): Promise<Balance | null> {
+  const headers = { Authorization: `Bearer ${key}` }
+  try {
+    const [s, u] = await Promise.all([
+      fetch('https://relaydance.com/v1/dashboard/billing/subscription', { headers, signal: AbortSignal.timeout(15000) }),
+      fetch('https://relaydance.com/v1/dashboard/billing/usage', { headers, signal: AbortSignal.timeout(15000) }),
+    ])
+    if (!s.ok) return null
+    const sj = await s.json()
+    const uj = u.ok ? await u.json().catch(() => ({})) : {}
+    return {
+      remainingUsd: Number(sj.hard_limit_usd ?? 0),
+      usedUsd: Number(uj.total_usage ?? 0) / 100,
+    }
+  } catch {
+    return null
   }
 }

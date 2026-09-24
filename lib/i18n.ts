@@ -92,6 +92,19 @@ const zh: Record<string, string> = {
   'Your renders bill to your own RelayDance balance. Orders, talents and footage stay private to your key.': '渲染费用从您自己的 RelayDance 余额扣除。订单、出镜人和成片仅您的 Key 可见。',
   'Sign in': '登录',
   'Invalid key. Check it in your RelayDance console.': 'Key 无效，请在 RelayDance 控制台核对。',
+  'balance': '余额',
+  'GATE 1 / pick the concept to render.': '第一道审核 / 选择要渲染的方案。',
+  'Approving pre-charges about': '批准后将从您的 RelayDance 余额预扣约',
+  'to your RelayDance balance, settled to actual output on completion; failed renders are refunded in full.': '，完成后按实际输出结算多退少补，渲染失败全额退回。方案和评审不计费。',
+  'A revision renders again, about': '打回修改会再次渲染，约',
+  'Insufficient RelayDance balance': 'RelayDance 余额不足',
+  'This key does not match the current session. Log out and sign in again.': '这个 Key 与当前会话不匹配，请退出后重新登录。',
+  'Fetch finished render': '获取已完成的成片',
+  'Enter your key again to continue. It is only kept in this browser session.': '请重新输入 Key 以继续。Key 只保存在本浏览器会话中。',
+  'Your key stays in this browser session only and is cleared when you close it. The server never stores it: it is used once, in the moment you approve a render, and billing is settled by RelayDance at your account rates.': '您的 Key 只保存在本浏览器的会话里，关闭浏览器即清空。服务端不保存 Key，只在您批准渲染的那一刻临时使用一次，费用由 RelayDance 按您账户的定价结算。',
+  'Render interrupted by a restart. Fetch the finished clip below, no new charge.': '渲染因服务重启中断。点下方按钮获取已完成的成片，不会再次扣费。',
+  'Render is taking longer than expected upstream. Fetch the finished clip below when ready, no new charge.': '上游渲染耗时超出预期。稍后点下方按钮获取成片，不会再次扣费。',
+  'Upstream render failed and was refunded. Approve again to re-render.': '上游渲染失败，费用已退回。可再次批准重新渲染。',
 }
 
 // Keys that carry a namespace prefix need an English surface form too.
