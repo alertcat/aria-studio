@@ -528,7 +528,12 @@ async function runProduction(o: Order) {
         const uri = await talentAssetUri(o.talentId)
         o.talentAsset = uri
         referenceAssets = [uri]
-        renderPrompt = `@image1 is the on-screen person throughout, keep their face and hair consistent. ${renderPrompt}`
+        const t = TALENTS.find((x) => x.id === o.talentId)!
+        renderPrompt =
+          `@image1 (${t.name}, ${t.role.toLowerCase()}) is the on-screen presenter and the main subject of this shot: ` +
+          `medium shot, their face clearly visible and turned toward the camera for the whole clip, natural expression, ` +
+          `keep their face, hair and outfit exactly consistent with @image1. They interact with the product or setting described next. ` +
+          `${renderPrompt} Frame the person, not just the product.`
         ev('TALENT', `Virtual talent ${TALENTS.find((t) => t.id === o.talentId)!.name} attached from the private asset library (${uri})`, o.id)
         saveSoon()
       } catch (e) {
