@@ -181,6 +181,13 @@ export default function StudioPage() {
           <a href="/" className="btn-ghost flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px]">
             <ArrowLeft size={13} /> Site
           </a>
+          <svg viewBox="0 0 100 100" aria-hidden="true" className="h-4 w-4 shrink-0 text-zinc-100" fill="currentColor">
+              <rect x="38.3" y="24.5" width="23.4" height="3" rx="0.6" />
+              <rect x="30.4" y="36.5" width="39.2" height="3" rx="0.6" />
+              <rect x="20" y="48.5" width="60" height="3" rx="0.6" />
+              <rect x="30.4" y="60.5" width="39.2" height="3" rx="0.6" />
+              <rect x="38.3" y="72.5" width="23.4" height="3" rx="0.6" />
+            </svg>
           <span className="display text-[16px] font-semibold tracking-tight">Aria Studio</span>
           <span className="mono rounded-full border border-white/20 px-2.5 py-0.5 text-[10.5px] text-zinc-200">
             CONTROL ROOM / LIVE PIPELINE

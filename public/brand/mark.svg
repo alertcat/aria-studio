@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+<rect width="100" height="100" rx="18" fill="#0a0a0c"/>
+<defs><filter id="g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter></defs>
+<rect x="38.3" y="24.5" width="23.4" height="3" rx="0.6" fill="#fafafa" opacity="0.55" filter="url(#g)"/>
+<rect x="30.4" y="36.5" width="39.2" height="3" rx="0.6" fill="#fafafa" opacity="0.55" filter="url(#g)"/>
+<rect x="20.0" y="48.5" width="60.0" height="3" rx="0.6" fill="#fafafa" opacity="0.55" filter="url(#g)"/>
+<rect x="30.4" y="60.5" width="39.2" height="3" rx="0.6" fill="#fafafa" opacity="0.55" filter="url(#g)"/>
+<rect x="38.3" y="72.5" width="23.4" height="3" rx="0.6" fill="#fafafa" opacity="0.55" filter="url(#g)"/>
+<rect x="38.3" y="24.5" width="23.4" height="3" rx="0.6" fill="#fafafa"/>
+<rect x="30.4" y="36.5" width="39.2" height="3" rx="0.6" fill="#fafafa"/>
+<rect x="20.0" y="48.5" width="60.0" height="3" rx="0.6" fill="#fafafa"/>
+<rect x="30.4" y="60.5" width="39.2" height="3" rx="0.6" fill="#fafafa"/>
+<rect x="38.3" y="72.5" width="23.4" height="3" rx="0.6" fill="#fafafa"/>
+</svg>

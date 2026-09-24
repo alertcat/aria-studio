@@ -7,6 +7,14 @@ const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono'
 
 export const metadata: Metadata = {
   title: 'Aria Studio, a solo performance',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '48x48' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/site.webmanifest',
   description:
     'A one-person media company: three AI directors concept, a Claude jury ranks by pairwise duels and Bradley-Terry, Seedance renders real footage, and the human CEO gates every dollar. Built at BUIDL_OPC_Hackathon_SG 2026.',
 }

@@ -283,7 +283,14 @@ export default function Page() {
       {/* nav */}
       <nav className="fixed inset-x-0 top-0 z-40 border-b border-white/5 bg-[#09090b]/70 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-6">
-          <div className="flex items-baseline gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <svg viewBox="0 0 100 100" aria-hidden="true" className="h-5 w-5 shrink-0 text-zinc-100" fill="currentColor">
+              <rect x="38.3" y="24.5" width="23.4" height="3" rx="0.6" />
+              <rect x="30.4" y="36.5" width="39.2" height="3" rx="0.6" />
+              <rect x="20" y="48.5" width="60" height="3" rx="0.6" />
+              <rect x="30.4" y="60.5" width="39.2" height="3" rx="0.6" />
+              <rect x="38.3" y="72.5" width="23.4" height="3" rx="0.6" />
+            </svg>
             <span className="display text-[18px] font-semibold tracking-tight">Aria Studio</span>
             <span className="mono hidden text-[11px] text-zinc-500 sm:inline">a solo performance</span>
           </div>
@@ -1120,7 +1127,13 @@ export default function Page() {
         <div className="mx-auto max-w-[1440px] px-6 py-10">
           <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
             <div>
-              <div className="display text-[15px] font-semibold">Aria Studio</div>
+              <div className="flex items-center gap-2"><svg viewBox="0 0 100 100" aria-hidden="true" className="h-4 w-4 shrink-0 text-zinc-100" fill="currentColor">
+              <rect x="38.3" y="24.5" width="23.4" height="3" rx="0.6" />
+              <rect x="30.4" y="36.5" width="39.2" height="3" rx="0.6" />
+              <rect x="20" y="48.5" width="60" height="3" rx="0.6" />
+              <rect x="30.4" y="60.5" width="39.2" height="3" rx="0.6" />
+              <rect x="38.3" y="72.5" width="23.4" height="3" rx="0.6" />
+            </svg><span className="display text-[15px] font-semibold">Aria Studio</span></div>
               <div className="mt-1 text-[11.5px] text-zinc-600">
                 An independent one-person media production company.
               </div>

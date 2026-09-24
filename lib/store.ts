@@ -486,14 +486,14 @@ async function runProduction(o: Order) {
     const { cachedVideoFile: cachedPoster } = readMediaCache(pKey)
     if (cachedPoster && fs.existsSync(path.join(MEDIA_DIR, cachedPoster))) {
       await sleep(2500 + Math.random() * 2000)
-      o.posterFile = `/media/${cachedPoster}`
+      o.posterFile = `/m/${cachedPoster}`
       ev('IMG', `Campaign poster ready`, o.id)
       saveSoon()
       return
     }
     try {
       await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName))
-      o.posterFile = `/media/${posterName}`
+      o.posterFile = `/m/${posterName}`
       o.cogsUsd += UNIT_COSTS.poster
       writeMediaCache(pKey, posterName)
       ev('IMG', `Campaign poster ready (gpt-image-2)`, o.id)
@@ -512,7 +512,7 @@ async function runProduction(o: Order) {
         saveSoon()
         await sleep(1100 + Math.random() * 800)
       }
-      o.videoFile = `/media/${cachedVideoFile}`
+      o.videoFile = `/m/${cachedVideoFile}`
       o.videoProgress = 100
       return
     }
@@ -530,7 +530,7 @@ async function runProduction(o: Order) {
       },
       { duration: 5, ratio: '9:16', model: VIDEO_MODEL_MINI, maxWaitS: 420 },
     )
-    o.videoFile = `/media/${videoName}`
+    o.videoFile = `/m/${videoName}`
     o.videoProgress = 100
     o.cogsUsd += UNIT_COSTS.render
     writeMediaCache(vKey, videoName)
