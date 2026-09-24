@@ -9,8 +9,8 @@ export const VIDEO_MODEL_FAST = 'doubao-seedance-2-0-fast-260128'
 export const VIDEO_MODEL_MINI = 'doubao-seedance-2-0-mini-720p'
 export const VIDEO_MODEL_HQ = 'doubao-seedance-2-0-720p'
 
-function key() {
-  const k = process.env.RELAYDANCE_API_KEY
+function key(override?: string) {
+  const k = override || process.env.RELAYDANCE_API_KEY
   if (!k) throw new Error('RELAYDANCE_API_KEY missing')
   return k
 }
@@ -22,6 +22,8 @@ export type VideoOpts = {
   maxWaitS?: number
   /** asset:// URIs from the private asset library, passed as reference images */
   referenceAssets?: string[]
+  /** tenant's own RelayDance key; falls back to the server key (demo mode) */
+  apiKey?: string
 }
 
 export async function submitVideo(prompt: string, opts?: VideoOpts): Promise<string> {
@@ -42,7 +44,7 @@ export async function submitVideo(prompt: string, opts?: VideoOpts): Promise<str
   }
   const res = await fetch(`${RD_BASE}/v1/video/generations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key()}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key(opts?.apiKey)}` },
     body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`relaydance submit ${res.status}: ${(await res.text()).slice(0, 200)}`)
@@ -53,9 +55,10 @@ export async function submitVideo(prompt: string, opts?: VideoOpts): Promise<str
 
 export async function pollVideoOnce(
   taskId: string,
+  apiKey?: string,
 ): Promise<{ status: string; progress: number; url?: string }> {
   const res = await fetch(`${RD_BASE}/v1/videos/${taskId}`, {
-    headers: { Authorization: `Bearer ${key()}` },
+    headers: { Authorization: `Bearer ${key(apiKey)}` },
   })
   if (!res.ok) throw new Error(`relaydance poll ${res.status}`)
   const json = await res.json()
@@ -96,7 +99,7 @@ async function generateVideoOnce(
   while (Date.now() - start < maxWait) {
     await new Promise((r) => setTimeout(r, 5000))
     try {
-      const st = await pollVideoOnce(taskId)
+      const st = await pollVideoOnce(taskId, opts?.apiKey)
       if (st.progress !== lastPct && st.progress > 0) {
         lastPct = st.progress
         onProgress?.(Math.min(st.progress, 99), 'rendering')

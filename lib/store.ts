@@ -7,7 +7,8 @@ import { generateVideo, VIDEO_MODEL_MINI } from './video'
 import { generateImage } from './image'
 import { chainEnabled, settleUsdc } from './chain'
 import { startEscrowWatch } from './escrowWatch'
-import { TALENTS, talentAssetUri } from './talent'
+import { TALENTS, talentAssetUri, warmTalents } from './talent'
+import { PILOT, type Tenant, defaultTenant } from './tenant'
 
 // ============================== types ==============================
 
@@ -193,9 +194,10 @@ export const TEMPLATES = [
 
 // ============================== store singleton ==============================
 
-const DATA_DIR = path.join(process.cwd(), 'data')
+export function makeStore(tenant: Tenant) {
+const DATA_DIR = tenant.dataDir
 const STATE_PATH = path.join(DATA_DIR, 'state.json')
-const MEDIA_DIR = path.join(process.cwd(), 'public', 'media')
+const MEDIA_DIR = tenant.mediaDir
 
 type Store = {
   state: State
@@ -242,11 +244,9 @@ function createStore(): Store {
   return store
 }
 
-const g = globalThis as unknown as { __solocorp?: Store }
-g.__solocorp ??= createStore()
-const S = g.__solocorp
+const S = createStore()
 
-export function getStore() {
+function getStore() {
   return S
 }
 
@@ -266,7 +266,7 @@ function saveSoon() {
   }, 400)
 }
 
-export function ev(tag: string, text: string, orderId?: string) {
+function ev(tag: string, text: string, orderId?: string) {
   S.state.events.unshift({ t: Date.now(), tag, text, orderId })
   if (S.state.events.length > 300) S.state.events.length = 300
   saveSoon()
@@ -374,7 +374,7 @@ async function pooled<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[
 async function conceptOne(o: Order, w: AgentDef): Promise<Draft> {
   w.status = 'working'
   ev(w.tag, `${w.name} is concepting "${o.title}"${o.revision ? ` rev ${o.revision}` : ''}`, o.id)
-  const key = cacheKey('concept', o.title, w.id, o.revision)
+  const key = cacheKey(tenant.id, 'concept', o.title, w.id, o.revision)
   const { content, cached } = await reliable(
     key,
     () =>
@@ -402,7 +402,7 @@ async function runJury(o: Order) {
     JUDGES.map((judge) => async (): Promise<Duel> => {
       const A = o.drafts[i]
       const B = o.drafts[j]
-      const key = cacheKey('duel', o.title, A.agentId, B.agentId, judge.id, o.revision)
+      const key = cacheKey(tenant.id, 'duel', o.title, A.agentId, B.agentId, judge.id, o.revision)
       const { content, cached } = await reliable(
         key,
         () => chatClaude({ system: judgeSystem(judge), user: duelUser(o, A, B) }),
@@ -456,7 +456,7 @@ async function runJury(o: Order) {
   saveSoon()
 }
 
-export function greenlightOrder(orderId: string, agentId?: string, talentId?: string) {
+function greenlightOrder(orderId: string, agentId?: string, talentId?: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || o.status !== 'greenlight') return
   const pick = agentId && o.drafts.some((d) => d.agentId === agentId) ? agentId : o.ranking[0].agentId
@@ -481,8 +481,8 @@ async function runProduction(o: Order) {
   ev('PROD', `Studio rendering "${winner.concept.concept}" (Seedance 2.0 mini, 5s vertical) plus campaign poster (gpt-image-2)`, o.id)
   saveSoon()
 
-  const vKey = cacheKey('video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '')
-  const pKey = cacheKey('poster', o.title, o.winnerAgentId ?? '', o.revision)
+  const vKey = cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '')
+  const pKey = cacheKey(tenant.id, 'poster', o.title, o.winnerAgentId ?? '', o.revision)
   const videoName = `${o.id}_r${o.revision}.mp4`
   const posterName = `${o.id}_r${o.revision}.png`
 
@@ -496,7 +496,7 @@ async function runProduction(o: Order) {
       return
     }
     try {
-      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName))
+      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName), { apiKey: tenant.relaydanceKey })
       o.posterFile = `/m/${posterName}`
       o.cogsUsd += UNIT_COSTS.poster
       writeMediaCache(pKey, posterName)
@@ -525,7 +525,7 @@ async function runProduction(o: Order) {
     let referenceAssets: string[] | undefined
     if (o.talentId) {
       try {
-        const uri = await talentAssetUri(o.talentId)
+        const uri = await talentAssetUri(o.talentId, { apiKey: tenant.relaydanceKey, dataDir: DATA_DIR })
         o.talentAsset = uri
         referenceAssets = [uri]
         const t = TALENTS.find((x) => x.id === o.talentId)!
@@ -551,7 +551,7 @@ async function runProduction(o: Order) {
         }
         saveSoon()
       },
-      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_MINI, maxWaitS: 480, referenceAssets },
+      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_MINI, maxWaitS: 480, referenceAssets, apiKey: tenant.relaydanceKey },
     )
     o.videoFile = `/m/${videoName}`
     o.videoProgress = 100
@@ -599,7 +599,7 @@ function writeMediaCache(key: string, fileName: string) {
   }
 }
 
-export async function runPipeline(orderId: string) {
+async function runPipeline(orderId: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o) return
   try {
@@ -616,7 +616,7 @@ export async function runPipeline(orderId: string) {
   }
 }
 
-export async function runRevision(orderId: string, feedback: string) {
+async function runRevision(orderId: string, feedback: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || !o.winnerAgentId) return
   try {
@@ -628,7 +628,7 @@ export async function runRevision(orderId: string, feedback: string) {
     saveSoon()
 
     w.status = 'working'
-    const key = cacheKey('concept-rev', o.title, w.id, o.revision)
+    const key = cacheKey(tenant.id, 'concept-rev', o.title, w.id, o.revision)
     const prev = o.drafts.find((d) => d.agentId === w.id)!
     const { content, cached } = await reliable(
       key,
@@ -657,7 +657,7 @@ export async function runRevision(orderId: string, feedback: string) {
   }
 }
 
-export function approveOrder(orderId: string) {
+function approveOrder(orderId: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || o.status !== 'review') return
   const seq = S.state.delivered + 1
@@ -668,11 +668,11 @@ export function approveOrder(orderId: string) {
   o.invoice = {
     id: `INV-2026-${String(seq).padStart(4, '0')}`,
     paidAt: Date.now(),
-    ref: chainEnabled()
+    ref: !PILOT && chainEnabled()
       ? 'Settling USDC on Base Sepolia...'
       : `0x${hash.slice(0, 40)} (Base Sepolia, simulated settlement)`,
   }
-  if (chainEnabled()) {
+  if (!PILOT && chainEnabled()) {
     void (async () => {
       try {
         const r = await settleUsdc(o.amountUsd)
@@ -703,7 +703,7 @@ export function approveOrder(orderId: string) {
   saveSoon()
 }
 
-export function createOrder(input: {
+function createOrder(input: {
   client: string
   title: string
   brief: string
@@ -731,7 +731,7 @@ export function createOrder(input: {
   return o
 }
 
-export function resetCompany() {
+function resetCompany() {
   S.state = freshState()
   S.agents = WORKERS.map((w) => ({ ...w }))
   S.seq = 1
@@ -739,9 +739,10 @@ export function resetCompany() {
   saveSoon()
 }
 
-export function publicState() {
-  startEscrowWatch(ev)
+function publicState() {
+  if (!PILOT) startEscrowWatch(ev)
   return {
+    tenant: { id: tenant.id, pilot: PILOT },
     company: COMPANY,
     state: S.state,
     agents: S.agents,
@@ -750,4 +751,37 @@ export function publicState() {
     unitCosts: UNIT_COSTS,
     talents: TALENTS,
   }
+}
+
+  function warm() {
+    return warmTalents({ apiKey: tenant.relaydanceKey, dataDir: DATA_DIR })
+  }
+
+  return {
+    tenant,
+    getStore,
+    ev,
+    greenlightOrder,
+    runPipeline,
+    runRevision,
+    approveOrder,
+    createOrder,
+    resetCompany,
+    publicState,
+    warm,
+  }
+}
+
+export type TenantStore = ReturnType<typeof makeStore>
+
+const registry = ((globalThis as unknown as { __ariaStores?: Map<string, TenantStore> }).__ariaStores ??= new Map())
+
+/** One store per tenant, cached for the process lifetime. */
+export function storeFor(tenant: Tenant = defaultTenant()): TenantStore {
+  let st = registry.get(tenant.id)
+  if (!st) {
+    st = makeStore(tenant)
+    registry.set(tenant.id, st)
+  }
+  return st
 }

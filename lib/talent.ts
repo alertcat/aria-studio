@@ -26,31 +26,35 @@ export const TALENTS: Talent[] = [
 ]
 
 const PAY = 'https://pay.relaydance.com'
-const DATA_DIR = path.join(process.cwd(), 'data')
-const CACHE_PATH = path.join(DATA_DIR, 'talent-assets.json')
 
-function key() {
-  const k = process.env.RELAYDANCE_API_KEY
+export type TalentCtx = { apiKey?: string; dataDir?: string }
+
+function key(override?: string) {
+  const k = override || process.env.RELAYDANCE_API_KEY
   if (!k) throw new Error('RELAYDANCE_API_KEY missing')
   return k
 }
 
-function readCache(): Record<string, string> {
+function cachePath(ctx?: TalentCtx) {
+  return path.join(ctx?.dataDir || path.join(process.cwd(), 'data'), 'talent-assets.json')
+}
+function readCache(ctx?: TalentCtx): Record<string, string> {
   try {
-    return JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'))
+    return JSON.parse(fs.readFileSync(cachePath(ctx), 'utf-8'))
   } catch {
     return {}
   }
 }
-function writeCache(c: Record<string, string>) {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(c, null, 1))
+function writeCache(c: Record<string, string>, ctx?: TalentCtx) {
+  const p = cachePath(ctx)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, JSON.stringify(c, null, 1))
 }
 
-async function j(method: string, url: string, body?: unknown, headers?: Record<string, string>, raw?: Buffer) {
+async function j(method: string, url: string, body?: unknown, headers?: Record<string, string>, raw?: Buffer, apiKey?: string) {
   const res = await fetch(url, {
     method,
-    headers: headers ?? { Authorization: `Bearer ${key()}`, 'Content-Type': 'application/json' },
+    headers: headers ?? { Authorization: `Bearer ${key(apiKey)}`, 'Content-Type': 'application/json' },
     body: raw ?? (body ? JSON.stringify(body) : undefined),
     signal: AbortSignal.timeout(120_000),
   })
@@ -64,18 +68,19 @@ async function j(method: string, url: string, body?: unknown, headers?: Record<s
 }
 
 /** Returns the asset:// URI for a talent, registering the portrait on first use. */
-export async function talentAssetUri(talentId: string): Promise<string> {
+export async function talentAssetUri(talentId: string, ctx?: TalentCtx): Promise<string> {
   const t = TALENTS.find((x) => x.id === talentId)
   if (!t) throw new Error(`unknown talent ${talentId}`)
-  const cache = readCache()
+  const cache = readCache(ctx)
   if (cache[t.id]) return cache[t.id]
+  const k = ctx?.apiKey
 
   const abs = path.join(process.cwd(), 'public', t.file)
   const blob = fs.readFileSync(abs)
   const md5 = crypto.createHash('md5').update(blob).digest('hex')
   const ext = path.extname(abs).slice(1).toLowerCase()
 
-  const u = await j('GET', `${PAY}/api/upload-url?ext=${ext}&md5=${md5}`)
+  const u = await j('GET', `${PAY}/api/upload-url?ext=${ext}&md5=${md5}`, undefined, undefined, undefined, k)
   if (!u.exists) {
     await j('PUT', u.upload_url, undefined, { 'Content-Type': u.content_type }, blob)
   }
@@ -83,25 +88,25 @@ export async function talentAssetUri(talentId: string): Promise<string> {
     source_url: u.source_url,
     asset_type: 'Image',
     name: '',
-  })
+  }, undefined, undefined, k)
   let status = a.status
   for (let i = 0; i < 40 && status !== 'Active' && status !== 'Failed'; i++) {
     await new Promise((r) => setTimeout(r, 3000))
-    const s = await j('GET', `${PAY}/api/assets/${a.id}/status`)
+    const s = await j('GET', `${PAY}/api/assets/${a.id}/status`, undefined, undefined, undefined, k)
     status = s.status
   }
   if (status !== 'Active') throw new Error(`talent asset ${t.id} not active (${status})`)
   cache[t.id] = a.uri
-  writeCache(cache)
+  writeCache(cache, ctx)
   return a.uri
 }
 
 /** Pre-register every talent so the live demo never waits on ingest. */
-export async function warmTalents(): Promise<Record<string, string>> {
+export async function warmTalents(ctx?: TalentCtx): Promise<Record<string, string>> {
   const out: Record<string, string> = {}
   for (const t of TALENTS) {
     try {
-      out[t.id] = await talentAssetUri(t.id)
+      out[t.id] = await talentAssetUri(t.id, ctx)
     } catch (e) {
       out[t.id] = 'ERR ' + (e as Error).message
     }

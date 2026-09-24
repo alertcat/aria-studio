@@ -6,9 +6,9 @@ import path from 'node:path'
 export async function generateImage(
   prompt: string,
   destAbsPath: string,
-  opts?: { size?: string },
+  opts?: { size?: string; apiKey?: string },
 ): Promise<void> {
-  const k = process.env.RELAYDANCE_API_KEY
+  const k = opts?.apiKey || process.env.RELAYDANCE_API_KEY
   if (!k) throw new Error('RELAYDANCE_API_KEY missing')
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 180_000)

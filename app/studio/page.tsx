@@ -9,6 +9,7 @@ import {
   CircleNotch,
   Lightning,
 } from '@phosphor-icons/react'
+import { t as tr, type Lang } from '@/lib/i18n'
 
 // Control Room: the live operating dashboard. Dense, functional, real pipeline.
 
@@ -68,6 +69,7 @@ type ApiState = {
   templates: { client: string; vertical: string; title: string; brief: string; amountUsd: number }[]
   unitCosts: Record<string, number>
   talents: Talent[]
+  tenant?: { id: string; pilot: boolean }
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -118,6 +120,12 @@ export default function StudioPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [feedbackText, setFeedbackText] = useState('')
   const [talentId, setTalentId] = useState<string>('')
+  const [lang, setLang] = useState<Lang>('en')
+  const langTouched = useRef(false)
+  const [needLogin, setNeedLogin] = useState(false)
+  const [loginKey, setLoginKey] = useState('')
+  const [loginErr, setLoginErr] = useState('')
+  const [loggingIn, setLoggingIn] = useState(false)
   const [playbookDraft, setPlaybookDraft] = useState<string | null>(null)
   const [custom, setCustom] = useState({
     client: '',
@@ -132,7 +140,16 @@ export default function StudioPage() {
   const poll = useCallback(async () => {
     try {
       const res = await fetch('/api/state', { cache: 'no-store' })
+      if (res.status === 401) {
+        setNeedLogin(true)
+        return
+      }
       const json: ApiState = await res.json()
+      setNeedLogin(false)
+      if (json.tenant?.pilot && !langTouched.current) {
+        langTouched.current = true
+        setLang('zh')
+      }
       setData(json)
       if (!selectedRef.current && json.state.orders.length > 0) {
         const prio = (s: OrderStatus) =>
@@ -160,6 +177,66 @@ export default function StudioPage() {
     poll()
   }
 
+  const doLogin = async () => {
+    setLoggingIn(true)
+    setLoginErr('')
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: loginKey.trim() }),
+    })
+    setLoggingIn(false)
+    if (r.ok) {
+      setLoginKey('')
+      poll()
+    } else {
+      setLoginErr(tr(lang, 'Invalid key. Check it in your RelayDance console.'))
+    }
+  }
+
+  if (needLogin) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center p-6">
+        <div className="card w-full max-w-[440px] p-6">
+          <div className="flex items-center justify-between">
+            <span className="display text-[18px] font-semibold tracking-tight">Aria Studio</span>
+            <button
+              onClick={() => {
+                langTouched.current = true
+                setLang(lang === 'en' ? 'zh' : 'en')
+              }}
+              className="btn-ghost rounded-full px-2.5 py-1 text-[11px]"
+            >
+              {lang === 'en' ? '中文' : 'EN'}
+            </button>
+          </div>
+          <div className="mt-5 text-[15px] font-medium">{tr(lang, 'Sign in with your RelayDance API key')}</div>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">
+            {tr(lang, 'Your renders bill to your own RelayDance balance. Orders, talents and footage stay private to your key.')}
+          </p>
+          <input
+            type="password"
+            value={loginKey}
+            onChange={(e) => setLoginKey(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') doLogin()
+            }}
+            placeholder="sk-..."
+            className="mono mt-4 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-[13px] outline-none focus:border-white/40"
+          />
+          {loginErr && <div className="mt-2 text-[12px] text-red-400">{loginErr}</div>}
+          <button
+            onClick={doLogin}
+            disabled={loggingIn || loginKey.trim().length < 10}
+            className="btn-primary mt-3 w-full rounded-lg px-4 py-2.5 text-[13px] font-semibold disabled:opacity-50"
+          >
+            {loggingIn ? '...' : tr(lang, 'Sign in')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (!data) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
@@ -177,6 +254,9 @@ export default function StudioPage() {
   const grossMargin =
     state.revenue > 0 ? (((state.revenue - cogsDelivered) / state.revenue) * 100).toFixed(1) : null
   const winnerDraft = selected?.drafts.find((d) => d.agentId === selected.winnerAgentId)
+  const pilot = !!data.tenant?.pilot
+  const estSpend = orders.reduce((a, o) => a + (o.cogsUsd || 0), 0)
+  const T = (k: string) => tr(lang, k)
   const selectedEvents = selected ? state.events.filter((e) => e.orderId === selected.id) : []
 
   return (
@@ -185,7 +265,7 @@ export default function StudioPage() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/8 bg-[#0b0b0d] px-4">
         <div className="flex items-center gap-3">
           <a href="/" className="btn-ghost flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px]">
-            <ArrowLeft size={13} /> Site
+            <ArrowLeft size={13} /> {T('Site')}
           </a>
           <svg viewBox="0 0 100 100" aria-hidden="true" className="h-4 w-4 shrink-0 text-zinc-100" fill="currentColor">
               <rect x="38.3" y="24.5" width="23.4" height="3" rx="0.6" />
@@ -196,19 +276,56 @@ export default function StudioPage() {
             </svg>
           <span className="display text-[16px] font-semibold tracking-tight">Aria Studio</span>
           <span className="mono rounded-full border border-white/20 px-2.5 py-0.5 text-[10.5px] text-zinc-200">
-            CONTROL ROOM / LIVE PIPELINE
+            {T('CONTROL ROOM / LIVE PIPELINE')}
           </span>
         </div>
         <div className="mono flex items-center gap-4 text-[12px] text-zinc-400">
-          <span>
-            revenue <span className="font-medium text-emerald-400">{money(state.revenue)}</span>
-          </span>
-          <span>
-            margin <span className="text-zinc-100">{grossMargin ? `${grossMargin}%` : '--'}</span>
-          </span>
-          <span>
-            shipped <span className="text-zinc-100">{state.delivered}</span>
-          </span>
+          {pilot ? (
+            <>
+              <span>
+                {T('orders')} <span className="text-zinc-100">{orders.length}</span>
+              </span>
+              <span>
+                {T('shipped')} <span className="text-zinc-100">{state.delivered}</span>
+              </span>
+              <span>
+                {T('est. spend')} <span className="text-zinc-100">${estSpend.toFixed(2)}</span>
+              </span>
+            </>
+          ) : (
+            <>
+              <span>
+                {T('revenue')} <span className="font-medium text-emerald-400">{money(state.revenue)}</span>
+              </span>
+              <span>
+                {T('margin')} <span className="text-zinc-100">{grossMargin ? `${grossMargin}%` : '--'}</span>
+              </span>
+              <span>
+                {T('shipped')} <span className="text-zinc-100">{state.delivered}</span>
+              </span>
+            </>
+          )}
+          <button
+            onClick={() => {
+              langTouched.current = true
+              setLang(lang === 'en' ? 'zh' : 'en')
+            }}
+            className="btn-ghost rounded-full px-2.5 py-1 text-[11px]"
+          >
+            {lang === 'en' ? '中文' : 'EN'}
+          </button>
+          {pilot && (
+            <button
+              onClick={async () => {
+                await fetch('/api/logout', { method: 'POST' })
+                setData(null)
+                setNeedLogin(true)
+              }}
+              className="btn-ghost rounded-full px-2.5 py-1 text-[11px]"
+            >
+              {T('Log out')}
+            </button>
+          )}
           
         </div>
       </header>
@@ -218,7 +335,7 @@ export default function StudioPage() {
         {/* LEFT: intake + queue */}
         <div className="flex min-h-0 flex-col gap-3 overflow-y-auto border-r border-white/8 p-3">
           <div className="card-quiet p-3">
-            <div className="display text-[13.5px] font-semibold">Fire a brief</div>
+            <div className="display text-[13.5px] font-semibold">{T('Fire a brief')}</div>
             <div className="mt-2 flex flex-col gap-1.5">
               {templates.map((t, i) => (
                 <button
@@ -227,7 +344,7 @@ export default function StudioPage() {
                   className="btn-ghost flex items-center justify-between rounded-lg px-3 py-2 text-left text-[12px]"
                 >
                   <span>
-                    {t.client} <span className="text-zinc-500">/ {t.vertical}</span>
+                    {t.client} <span className="text-zinc-500">/ {T(t.vertical)}</span>
                   </span>
                   <span className="mono text-zinc-400">{money(t.amountUsd)}</span>
                 </button>
@@ -237,7 +354,7 @@ export default function StudioPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label htmlFor="s-client" className="mb-0.5 block text-[10.5px] text-zinc-500">
-                    Client
+                    {T('Client')}
                   </label>
                   <input
                     id="s-client"
@@ -248,7 +365,7 @@ export default function StudioPage() {
                 </div>
                 <div>
                   <label htmlFor="s-usd" className="mb-0.5 block text-[10.5px] text-zinc-500">
-                    Budget
+                    {T('Budget')}
                   </label>
                   <input
                     id="s-usd"
@@ -261,7 +378,7 @@ export default function StudioPage() {
               </div>
               <div>
                 <label htmlFor="s-vert" className="mb-0.5 block text-[10.5px] text-zinc-500">
-                  Vertical
+                  {T('Vertical')}
                 </label>
                 <select
                   id="s-vert"
@@ -277,7 +394,7 @@ export default function StudioPage() {
               </div>
               <div>
                 <label htmlFor="s-title" className="mb-0.5 block text-[10.5px] text-zinc-500">
-                  Title
+                  {T('Title')}
                 </label>
                 <input
                   id="s-title"
@@ -288,7 +405,7 @@ export default function StudioPage() {
               </div>
               <div>
                 <label htmlFor="s-brief" className="mb-0.5 block text-[10.5px] text-zinc-500">
-                  Brief
+                  {T('Brief')}
                 </label>
                 <textarea
                   id="s-brief"
@@ -302,13 +419,13 @@ export default function StudioPage() {
                 onClick={() => post('/api/orders', custom)}
                 className="btn-primary flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold"
               >
-                <Lightning size={14} weight="bold" /> Lock escrow and run
+                <Lightning size={14} weight="bold" /> {pilot ? T('Submit and run') : T('Lock escrow and run')}
               </button>
             </div>
           </div>
 
           <details className="card-quiet p-3">
-            <summary className="display cursor-pointer text-[13.5px] font-semibold">CEO Playbook</summary>
+            <summary className="display cursor-pointer text-[13.5px] font-semibold">{T('CEO Playbook')}</summary>
             <textarea
               value={playbookDraft ?? state.playbook}
               onChange={(e) => setPlaybookDraft(e.target.value)}
@@ -324,7 +441,7 @@ export default function StudioPage() {
           </details>
 
           <div className="card-quiet flex min-h-0 flex-1 flex-col p-3">
-            <div className="display text-[13.5px] font-semibold">Queue</div>
+            <div className="display text-[13.5px] font-semibold">{T('Queue')}</div>
             <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
               {orders.map((o) => (
                 <button
@@ -339,7 +456,7 @@ export default function StudioPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[11.5px] font-medium">{o.title}</span>
-                    <span className={statusChip(o.status)}>{STATUS_LABEL[o.status]}</span>
+                    <span className={statusChip(o.status)}>{T(STATUS_LABEL[o.status])}</span>
                   </div>
                   <div className="mono mt-0.5 text-[10.5px] text-zinc-500">
                     {o.client} / {money(o.amountUsd)}
@@ -363,20 +480,20 @@ export default function StudioPage() {
         <div className="min-h-0 overflow-y-auto p-4">
           {!selected ? (
             <div className="flex h-full items-center justify-center text-[13px] text-zinc-600">
-              Select or fire an order
+              {T('Select or fire an order')}
             </div>
           ) : (
             <div className="mx-auto max-w-[880px]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="mono text-[11px] text-zinc-500">
-                    {selected.client} / {selected.vertical} /{' '}
-                    <span className="text-zinc-300">{money(selected.amountUsd)} in escrow</span>
+                    {selected.client} / {T(selected.vertical)} /{' '}
+                    <span className="text-zinc-300">{money(selected.amountUsd)} {pilot ? T('budget') : T('in escrow')}</span>
                     {selected.revision > 0 && <span className="text-amber-400"> / rev {selected.revision}</span>}
                   </div>
                   <h1 className="display mt-0.5 text-[22px] font-semibold tracking-tight">{selected.title}</h1>
                 </div>
-                <span className={statusChip(selected.status)}>{STATUS_LABEL[selected.status]}</span>
+                <span className={statusChip(selected.status)}>{T(STATUS_LABEL[selected.status])}</span>
               </div>
               <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">{selected.brief}</p>
 
@@ -400,7 +517,7 @@ export default function StudioPage() {
                           (reached ? 'border-white/25 text-zinc-100' : 'border-white/10 text-zinc-600')
                         }
                       >
-                        {lbl}
+                        {T('stage ' + lbl)}
                       </span>
                     </span>
                   )
@@ -413,7 +530,7 @@ export default function StudioPage() {
                   {agents.map((a) => (
                     <div key={a.id} className="card-quiet p-3">
                       <div className="mono text-[11px] text-zinc-400">
-                        {a.name} <span className="text-zinc-600">{a.role}</span>
+                        {a.name} <span className="text-zinc-600">{T(a.role)}</span>
                       </div>
                       <div className="shimmer mt-3 h-2 w-full rounded-full" />
                       <div className="shimmer mt-2 h-2 w-2/3 rounded-full" />
@@ -427,7 +544,7 @@ export default function StudioPage() {
               {selected.status === 'jury' && (
                 <div className="card-quiet mt-4 p-4">
                   <div className="mono pulse-soft text-[11px] text-amber-300">
-                    jury in session: pairwise duels, Bradley-Terry aggregation
+                    {T('jury in session: pairwise duels, Bradley-Terry aggregation')}
                   </div>
                   <div className="mt-2 space-y-1">
                     {selectedEvents
@@ -445,15 +562,15 @@ export default function StudioPage() {
               {selected.status === 'greenlight' && (
                 <div className="mt-4">
                   <div className="mono mb-2 text-[11px] text-zinc-200">
-                    GATE 1 / pick the concept to fund. Concepts cost cents, the render costs about $0.27.
+                    {T('GATE 1 / pick the concept to fund. Concepts cost cents, the render costs about $0.27.')}
                   </div>
                   <div className="card-quiet mb-3 p-3">
                     <div className="flex items-baseline justify-between">
                       <div className="mono text-[10.5px] text-zinc-400">
-                        VIRTUAL TALENT / optional on-screen person, synthetic, cleared for commercial use
+                        {T('VIRTUAL TALENT / optional on-screen person, synthetic, cleared for commercial use')}
                       </div>
                       <div className="mono text-[10px] text-zinc-600">
-                        private asset library, registered once, reused per face
+                        {T('private asset library, registered once, reused per face')}
                       </div>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -464,7 +581,7 @@ export default function StudioPage() {
                           (talentId === '' ? 'border-white/60 bg-white/[0.06] text-zinc-100' : 'border-white/10 text-zinc-500 hover:border-white/25')
                         }
                       >
-                        no face
+                        {T('no face')}
                       </button>
                       {talents
                         .slice()
@@ -502,7 +619,7 @@ export default function StudioPage() {
                         >
                           <div className="mono flex items-center justify-between text-[10.5px] text-zinc-500">
                             <span>
-                              {a.name} / {a.role}
+                              {a.name} / {T(a.role)}
                             </span>
                             {idx === 0 && <span className="text-zinc-100">jury pick</span>}
                           </div>
@@ -534,7 +651,7 @@ export default function StudioPage() {
                               (idx === 0 ? 'btn-primary' : 'btn-ghost')
                             }
                           >
-                            {idx === 0 ? 'Greenlight' : 'Override and fund'}
+                            {idx === 0 ? T('Greenlight') : T('Override and fund')}
                           </button>
                         </div>
                       )
@@ -578,7 +695,7 @@ export default function StudioPage() {
                     ) : (
                       <div className="card-quiet flex aspect-[9/16] items-center justify-center p-4 text-center">
                         <span className="mono text-[10.5px] text-amber-300/80">
-                          {selected.videoNote ?? STATUS_LABEL[selected.status]}
+                          {selected.videoNote ?? T(STATUS_LABEL[selected.status])}
                         </span>
                       </div>
                     )}
@@ -593,10 +710,10 @@ export default function StudioPage() {
                   <div>
                     <div className="card-quiet p-3.5">
                       <div className="mono flex items-center justify-between text-[10.5px] text-zinc-500">
-                        <span>winning concept by {agentOf(selected.winnerAgentId)?.name}</span>
+                        <span>{T('winning concept by')} {agentOf(selected.winnerAgentId)?.name}</span>
                         {selected.talentId && (
                           <span className="rounded-full border border-white/20 px-2 py-0.5 text-[9.5px] text-zinc-200">
-                            virtual talent {talents.find((t) => t.id === selected.talentId)?.name ?? selected.talentId} / cleared for commercial use
+                            {T('virtual talent')} {talents.find((t) => t.id === selected.talentId)?.name ?? selected.talentId} / {T('cleared for commercial use')}
                           </span>
                         )}
                       </div>
@@ -606,36 +723,44 @@ export default function StudioPage() {
                         {winnerDraft?.concept.video_prompt}
                       </div>
                       <div className="mono mt-3 flex gap-5 border-t border-white/8 pt-2.5 text-[11.5px] text-zinc-400">
-                        <span>
-                          price <span className="text-zinc-100">{money(selected.amountUsd)}</span>
-                        </span>
-                        <span>
-                          cogs <span className="text-zinc-100">${selected.cogsUsd.toFixed(2)}</span>
-                        </span>
-                        <span>
-                          margin{' '}
-                          <span className="text-emerald-400">
-                            {(((selected.amountUsd - selected.cogsUsd) / selected.amountUsd) * 100).toFixed(1)}%
+                        {pilot ? (
+                          <span>
+                            {T('render spend')} <span className="text-zinc-100">${selected.cogsUsd.toFixed(2)}</span>
                           </span>
-                        </span>
+                        ) : (
+                          <>
+                            <span>
+                              {T('price')} <span className="text-zinc-100">{money(selected.amountUsd)}</span>
+                            </span>
+                            <span>
+                              {T('cogs')} <span className="text-zinc-100">${selected.cogsUsd.toFixed(2)}</span>
+                            </span>
+                            <span>
+                              {T('margin')}{' '}
+                              <span className="text-emerald-400">
+                                {(((selected.amountUsd - selected.cogsUsd) / selected.amountUsd) * 100).toFixed(1)}%
+                              </span>
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
 
                     {selected.status === 'review' && (
                       <div className="mt-3">
                         <div className="mono mb-1.5 text-[11px] text-zinc-200">
-                          GATE 2 / your acceptance releases the escrow
+                          {pilot ? T('GATE 2 / accept to deliver, send back to revise') : T('GATE 2 / your acceptance releases the escrow')}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => post('/api/review', { orderId: selected.id, action: 'approve' })}
                             className="btn-primary flex items-center gap-1.5 rounded-lg px-4 py-2 text-[12.5px] font-semibold"
                           >
-                            <CheckCircle size={15} weight="bold" /> Accept and settle
+                            <CheckCircle size={15} weight="bold" /> {T('Accept and settle')}
                           </button>
                           <input
                             aria-label="CEO revision notes"
-                            placeholder="Notes for the revision"
+                            placeholder={T('Notes for the revision')}
                             value={feedbackText}
                             onChange={(e) => setFeedbackText(e.target.value)}
                             className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] outline-none placeholder:text-zinc-600 focus:border-white/30"
@@ -647,7 +772,7 @@ export default function StudioPage() {
                             }}
                             className="btn-ghost flex items-center gap-1 rounded-lg px-3 py-2 text-[12px] font-medium"
                           >
-                            <ArrowUUpLeft size={13} /> Send back
+                            <ArrowUUpLeft size={13} /> {T('Send back')}
                           </button>
                         </div>
                       </div>
@@ -688,7 +813,7 @@ export default function StudioPage() {
               {selected.duels.length > 0 && selected.status !== 'jury' && (
                 <details className="mt-4">
                   <summary className="mono cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300">
-                    jury detail: {selected.duels.length} duels, Bradley-Terry aggregate
+                    {T('jury detail')}: {selected.duels.length} {T('duels, Bradley-Terry aggregate')}
                   </summary>
                   <div className="card-quiet mt-2 space-y-1 p-3">
                     {selected.duels.map((d, i) => (
@@ -706,33 +831,52 @@ export default function StudioPage() {
 
         {/* RIGHT: feed + economics */}
         <div className="flex min-h-0 flex-col gap-3 overflow-hidden border-l border-white/8 p-3">
-          <div className="card-quiet grid shrink-0 grid-cols-3 gap-2 p-3 text-center">
-            <div>
-              <div className="mono text-[10px] text-zinc-500">avg order</div>
-              <div className="mono mt-0.5 text-[15px] font-semibold">
-                {shipped.length ? money(state.revenue / shipped.length) : '--'}
+          {pilot ? (
+            <div className="card-quiet grid shrink-0 grid-cols-3 gap-2 p-3 text-center">
+              <div>
+                <div className="mono text-[10px] text-zinc-500">{T('shipped')}</div>
+                <div className="mono mt-0.5 text-[15px] font-semibold">{shipped.length}</div>
+              </div>
+              <div>
+                <div className="mono text-[10px] text-zinc-500">{T('avg cogs')}</div>
+                <div className="mono mt-0.5 text-[15px] font-semibold">
+                  {shipped.length ? '$' + (cogsDelivered / shipped.length).toFixed(2) : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="mono text-[10px] text-zinc-500">{T('total spend')}</div>
+                <div className="mono mt-0.5 text-[15px] font-semibold">${estSpend.toFixed(2)}</div>
               </div>
             </div>
-            <div>
-              <div className="mono text-[10px] text-zinc-500">avg cogs</div>
-              <div className="mono mt-0.5 text-[15px] font-semibold">
-                {shipped.length ? '$' + (cogsDelivered / shipped.length).toFixed(2) : '--'}
+          ) : (
+            <div className="card-quiet grid shrink-0 grid-cols-3 gap-2 p-3 text-center">
+              <div>
+                <div className="mono text-[10px] text-zinc-500">{T('avg order')}</div>
+                <div className="mono mt-0.5 text-[15px] font-semibold">
+                  {shipped.length ? money(state.revenue / shipped.length) : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="mono text-[10px] text-zinc-500">{T('avg cogs')}</div>
+                <div className="mono mt-0.5 text-[15px] font-semibold">
+                  {shipped.length ? '$' + (cogsDelivered / shipped.length).toFixed(2) : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="mono text-[10px] text-zinc-500">{T('margin')}</div>
+                <div className="mono mt-0.5 text-[15px] font-semibold text-emerald-400">
+                  {grossMargin ? `${grossMargin}%` : '--'}
+                </div>
               </div>
             </div>
-            <div>
-              <div className="mono text-[10px] text-zinc-500">margin</div>
-              <div className="mono mt-0.5 text-[15px] font-semibold text-emerald-400">
-                {grossMargin ? `${grossMargin}%` : '--'}
-              </div>
-            </div>
-          </div>
+          )}
           <div className="card-quiet shrink-0 p-3">
-            <div className="mono text-[10px] uppercase tracking-wide text-zinc-500">The team</div>
+            <div className="mono text-[10px] uppercase tracking-wide text-zinc-500">{T('The team')}</div>
             <div className="mt-2 space-y-1.5">
               {agents.map((a) => (
                 <div key={a.id} className="mono flex items-center justify-between text-[11px]">
                   <span className="text-zinc-300">
-                    {a.name} <span className="text-zinc-600">{a.role}</span>
+                    {a.name} <span className="text-zinc-600">{T(a.role)}</span>
                   </span>
                   <span className="flex items-center gap-2 text-zinc-500">
                     rep {a.reputation}
@@ -748,7 +892,7 @@ export default function StudioPage() {
             </div>
           </div>
           <div className="card-quiet flex min-h-0 flex-1 flex-col p-3">
-            <div className="mono shrink-0 text-[10px] uppercase tracking-wide text-zinc-500">Live feed</div>
+            <div className="mono shrink-0 text-[10px] uppercase tracking-wide text-zinc-500">{T('Live feed')}</div>
             <div className="mono mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 text-[10.5px] leading-relaxed">
               {state.events.map((e, i) => (
                 <div key={i} className={'flex gap-1.5 ' + (selected && e.orderId === selected.id ? '' : 'opacity-60')}>
