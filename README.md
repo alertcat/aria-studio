@@ -21,6 +21,10 @@ The deliverable is never a wall of text. It is a watchable cut plus a campaign k
 | AI's Loop | Brief -> 3 directors pitch structured concepts -> **jury: pairwise duels + Bradley-Terry** -> render + poster in parallel -> revision loop on CEO notes. |
 | Human's Review | **Twice, where the money is.** Gate 1, Greenlight: concepts cost cents, renders cost dollars, the human approves the spend (and can override the jury). Gate 2, Acceptance: the human watches the actual cut, and accepting releases escrow as a real USDC transfer on Base Sepolia. |
 
+## Virtual talent, compliance built in
+
+Seedance rejects real human faces at the model input layer, for every platform. Aria ships the compliance path as a product feature: six synthetic spokespersons live in the greenlight gate. Pick one, and the portrait is registered once into RelayDance's private asset library and referenced as an `asset://` reference image, so the same face renders consistently across every cut with zero likeness risk. Authorised real-person talent (liveness-verified) is the enterprise path. No filter bypass, ever.
+
 ## Why the jury matters
 
 Single-shot "rate this 1-10" scoring is vibes. Aria Studio ranks concepts the way real juries work: independent Claude judges compare every pair head-to-head on different criteria (client fit vs scroll-stopping power), and **Bradley-Terry MLE** aggregates the verdicts into a ranking. This exact mechanism took **rank 1 on GG24 Deep Funding Level 3** (Ethereum Foundation / Gitcoin), scored against hidden human jury ground truth. Here it doubles as the economic filter: cents of text duels protect dollars of render spend.
@@ -39,7 +43,7 @@ jury: 3 pairwise duels x 2 Claude judges    claude-sonnet-5 on the founder's own
    -> Bradley-Terry ranking
    |
    v
-GATE 1: CEO greenlight (fund a concept, override allowed)
+GATE 1: CEO greenlight (fund a concept, override allowed, optional virtual talent)
    |
    v
 production, in parallel:                    seedance 2.0 mini (5s, 9:16, ~120s)
