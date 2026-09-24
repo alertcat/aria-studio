@@ -54,9 +54,12 @@ type Order = {
   videoProgress?: number
   videoNote?: string
   posterFile?: string
+  talentId?: string
+  talentAsset?: string
   invoice?: { id: string; paidAt: number; ref: string }
 }
 type Ev = { t: number; tag: string; text: string; orderId?: string }
+type Talent = { id: string; name: string; role: string; fit: string[]; file: string }
 type ApiState = {
   company: { name: string; ceo: string; vertical: string }
   state: { orders: Order[]; events: Ev[]; revenue: number; delivered: number; playbook: string }
@@ -64,6 +67,7 @@ type ApiState = {
   judges: string[]
   templates: { client: string; vertical: string; title: string; brief: string; amountUsd: number }[]
   unitCosts: Record<string, number>
+  talents: Talent[]
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -82,6 +86,7 @@ const TAG_STYLE: Record<string, string> = {
   CHAIN: 'text-emerald-400',
   GLGHT: 'text-zinc-100',
   GATE: 'text-zinc-100',
+  TALENT: 'text-zinc-100',
   DUEL: 'text-amber-300',
   RANK: 'text-amber-200',
   JURY: 'text-amber-300',
@@ -112,6 +117,7 @@ export default function StudioPage() {
   const [data, setData] = useState<ApiState | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [feedbackText, setFeedbackText] = useState('')
+  const [talentId, setTalentId] = useState<string>('')
   const [playbookDraft, setPlaybookDraft] = useState<string | null>(null)
   const [custom, setCustom] = useState({
     client: '',
@@ -162,7 +168,7 @@ export default function StudioPage() {
     )
   }
 
-  const { state, agents, templates } = data
+  const { state, agents, templates, talents = [] } = data
   const orders = state.orders
   const selected = orders.find((o) => o.id === selectedId) ?? null
   const agentOf = (id?: string) => agents.find((a) => a.id === id)
@@ -441,6 +447,47 @@ export default function StudioPage() {
                   <div className="mono mb-2 text-[11px] text-zinc-200">
                     GATE 1 / pick the concept to fund. Concepts cost cents, the render costs about $0.27.
                   </div>
+                  <div className="card-quiet mb-3 p-3">
+                    <div className="flex items-baseline justify-between">
+                      <div className="mono text-[10.5px] text-zinc-400">
+                        VIRTUAL TALENT / optional on-screen person, synthetic, cleared for commercial use
+                      </div>
+                      <div className="mono text-[10px] text-zinc-600">
+                        private asset library, registered once, reused per face
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setTalentId('')}
+                        className={
+                          'tap flex h-[74px] w-[74px] items-center justify-center rounded-lg border text-[10px] ' +
+                          (talentId === '' ? 'border-white/60 bg-white/[0.06] text-zinc-100' : 'border-white/10 text-zinc-500 hover:border-white/25')
+                        }
+                      >
+                        no face
+                      </button>
+                      {talents
+                        .slice()
+                        .sort((a, b) => Number(b.fit.includes(selected.vertical)) - Number(a.fit.includes(selected.vertical)))
+                        .map((t) => (
+                          <button
+                            key={t.id}
+                            onClick={() => setTalentId(t.id)}
+                            title={`${t.name}, ${t.role}`}
+                            className={
+                              'tap relative h-[74px] w-[74px] overflow-hidden rounded-lg border ' +
+                              (talentId === t.id ? 'border-white/70 ring-1 ring-white/40' : 'border-white/10 hover:border-white/30') +
+                              (t.fit.includes(selected.vertical) ? '' : ' opacity-50')
+                            }
+                          >
+                            <img src={t.file} alt={t.name} className="h-full w-full object-cover" />
+                            <span className="mono absolute inset-x-0 bottom-0 bg-black/65 px-1 py-0.5 text-[9px] text-zinc-100">
+                              {t.name}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                     {selected.ranking.map((r, idx) => {
                       const d = selected.drafts.find((x) => x.agentId === r.agentId)!
@@ -481,7 +528,7 @@ export default function StudioPage() {
                             {(r.score * 100).toFixed(0)}% / {r.wins}W
                           </div>
                           <button
-                            onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId })}
+                            onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId, talentId: talentId || undefined })}
                             className={
                               'mt-3 w-full rounded-lg px-3 py-2 text-[12px] font-semibold ' +
                               (idx === 0 ? 'btn-primary' : 'btn-ghost')
@@ -545,8 +592,13 @@ export default function StudioPage() {
                   </div>
                   <div>
                     <div className="card-quiet p-3.5">
-                      <div className="mono text-[10.5px] text-zinc-500">
-                        winning concept by {agentOf(selected.winnerAgentId)?.name}
+                      <div className="mono flex items-center justify-between text-[10.5px] text-zinc-500">
+                        <span>winning concept by {agentOf(selected.winnerAgentId)?.name}</span>
+                        {selected.talentId && (
+                          <span className="rounded-full border border-white/20 px-2 py-0.5 text-[9.5px] text-zinc-200">
+                            virtual talent {talents.find((t) => t.id === selected.talentId)?.name ?? selected.talentId} / cleared for commercial use
+                          </span>
+                        )}
                       </div>
                       <div className="display mt-0.5 text-[17px] font-semibold">{winnerDraft?.concept.concept}</div>
                       <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-400">{winnerDraft?.concept.hook}</p>

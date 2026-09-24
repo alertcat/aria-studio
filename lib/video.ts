@@ -15,19 +15,35 @@ function key() {
   return k
 }
 
-export async function submitVideo(
-  prompt: string,
-  opts?: { duration?: number; ratio?: string; model?: string },
-): Promise<string> {
+export type VideoOpts = {
+  duration?: number
+  ratio?: string
+  model?: string
+  maxWaitS?: number
+  /** asset:// URIs from the private asset library, passed as reference images */
+  referenceAssets?: string[]
+}
+
+export async function submitVideo(prompt: string, opts?: VideoOpts): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: opts?.model ?? VIDEO_MODEL_FAST,
+    prompt,
+    ratio: opts?.ratio ?? '9:16',
+    duration: opts?.duration ?? 5,
+  }
+  if (opts?.referenceAssets?.length) {
+    body.metadata = {
+      content: opts.referenceAssets.map((uri) => ({
+        type: 'image_url',
+        role: 'reference_image',
+        image_url: { url: uri },
+      })),
+    }
+  }
   const res = await fetch(`${RD_BASE}/v1/video/generations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key()}` },
-    body: JSON.stringify({
-      model: opts?.model ?? VIDEO_MODEL_FAST,
-      prompt,
-      ratio: opts?.ratio ?? '9:16',
-      duration: opts?.duration ?? 5,
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`relaydance submit ${res.status}: ${(await res.text()).slice(0, 200)}`)
   const json = await res.json()
@@ -52,7 +68,7 @@ export async function generateVideo(
   prompt: string,
   destAbsPath: string,
   onProgress?: (pct: number, phase: string) => void,
-  opts?: { duration?: number; ratio?: string; model?: string; maxWaitS?: number },
+  opts?: VideoOpts,
 ): Promise<void> {
   // "no dialogue" suffix dodges the upstream audio content filter's false positives
   const safePrompt = `${prompt} No dialogue, no voiceover, ambient sound only.`
@@ -69,7 +85,7 @@ async function generateVideoOnce(
   prompt: string,
   destAbsPath: string,
   onProgress?: (pct: number, phase: string) => void,
-  opts?: { duration?: number; ratio?: string; model?: string; maxWaitS?: number },
+  opts?: VideoOpts,
 ): Promise<void> {
   const taskId = await submitVideo(prompt, opts)
   onProgress?.(2, 'queued')

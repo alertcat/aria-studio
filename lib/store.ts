@@ -7,6 +7,7 @@ import { generateVideo, VIDEO_MODEL_MINI } from './video'
 import { generateImage } from './image'
 import { chainEnabled, settleUsdc } from './chain'
 import { startEscrowWatch } from './escrowWatch'
+import { TALENTS, talentAssetUri } from './talent'
 
 // ============================== types ==============================
 
@@ -69,6 +70,8 @@ export type Order = {
   videoProgress?: number
   videoNote?: string
   posterFile?: string
+  talentId?: string
+  talentAsset?: string
   feedback?: string
   invoice?: { id: string; paidAt: number; ref: string }
   error?: string
@@ -453,16 +456,17 @@ async function runJury(o: Order) {
   saveSoon()
 }
 
-export function greenlightOrder(orderId: string, agentId?: string) {
+export function greenlightOrder(orderId: string, agentId?: string, talentId?: string) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || o.status !== 'greenlight') return
   const pick = agentId && o.drafts.some((d) => d.agentId === agentId) ? agentId : o.ranking[0].agentId
   o.winnerAgentId = pick
+  o.talentId = talentId && TALENTS.some((t) => t.id === talentId) ? talentId : undefined
   agent(pick).reputation += 2
   const overrode = pick !== o.ranking[0].agentId
   ev(
     'GLGHT',
-    `CEO greenlit ${agent(pick).name}${overrode ? ' (overriding the jury pick)' : ''}, "${o.drafts.find((d) => d.agentId === pick)!.concept.concept}" goes to production`,
+    `CEO greenlit ${agent(pick).name}${overrode ? ' (overriding the jury pick)' : ''}, "${o.drafts.find((d) => d.agentId === pick)!.concept.concept}" goes to production${o.talentId ? ` with virtual talent ${TALENTS.find((t) => t.id === o.talentId)!.name}` : ''}`,
     o.id,
   )
   saveSoon()
@@ -477,7 +481,7 @@ async function runProduction(o: Order) {
   ev('PROD', `Studio rendering "${winner.concept.concept}" (Seedance 2.0 mini, 5s vertical) plus campaign poster (gpt-image-2)`, o.id)
   saveSoon()
 
-  const vKey = cacheKey('video', o.title, o.winnerAgentId ?? '', o.revision)
+  const vKey = cacheKey('video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '')
   const pKey = cacheKey('poster', o.title, o.winnerAgentId ?? '', o.revision)
   const videoName = `${o.id}_r${o.revision}.mp4`
   const posterName = `${o.id}_r${o.revision}.png`
@@ -517,8 +521,22 @@ async function runProduction(o: Order) {
       return
     }
     let lastLogged = -20
+    let renderPrompt = winner.concept.video_prompt
+    let referenceAssets: string[] | undefined
+    if (o.talentId) {
+      try {
+        const uri = await talentAssetUri(o.talentId)
+        o.talentAsset = uri
+        referenceAssets = [uri]
+        renderPrompt = `@image1 is the on-screen person throughout, keep their face and hair consistent. ${renderPrompt}`
+        ev('TALENT', `Virtual talent ${TALENTS.find((t) => t.id === o.talentId)!.name} attached from the private asset library (${uri})`, o.id)
+        saveSoon()
+      } catch (e) {
+        ev('ERR', `Talent asset unavailable (${(e as Error).message.slice(0, 60)}), rendering without a face`, o.id)
+      }
+    }
     await generateVideo(
-      winner.concept.video_prompt,
+      renderPrompt,
       path.join(MEDIA_DIR, videoName),
       (pct) => {
         o.videoProgress = pct
@@ -528,7 +546,7 @@ async function runProduction(o: Order) {
         }
         saveSoon()
       },
-      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_MINI, maxWaitS: 420 },
+      { duration: 5, ratio: '9:16', model: VIDEO_MODEL_MINI, maxWaitS: 480, referenceAssets },
     )
     o.videoFile = `/m/${videoName}`
     o.videoProgress = 100
@@ -725,5 +743,6 @@ export function publicState() {
     judges: JUDGES.map((j) => j.name),
     templates: TEMPLATES,
     unitCosts: UNIT_COSTS,
+    talents: TALENTS,
   }
 }

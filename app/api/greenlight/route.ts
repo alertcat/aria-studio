@@ -8,6 +8,10 @@ export async function POST(req: Request) {
   if (!body.orderId) {
     return Response.json({ error: 'orderId required' }, { status: 400 })
   }
-  greenlightOrder(String(body.orderId), body.agentId ? String(body.agentId) : undefined)
+  greenlightOrder(
+    String(body.orderId),
+    body.agentId ? String(body.agentId) : undefined,
+    body.talentId ? String(body.talentId) : undefined,
+  )
   return Response.json({ ok: true })
 }
