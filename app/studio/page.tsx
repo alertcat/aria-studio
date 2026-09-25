@@ -199,7 +199,10 @@ export default function StudioPage() {
         setLang('zh')
       }
       setData(json)
-      if (!selectedRef.current && json.state.orders.length > 0) {
+      const present = selectedRef.current ? json.state.orders.some((o) => o.id === selectedRef.current) : false
+      if (json.state.orders.length === 0) {
+        if (selectedRef.current) setSelectedId(null)
+      } else if (!present) {
         const prio = (s: OrderStatus) =>
           ({ greenlight: 0, review: 1, producing: 2, revising: 2, jury: 3, concepting: 4, inbox: 5, delivered: 6 })[s]
         const hot = [...json.state.orders].sort((a, b) => prio(a.status) - prio(b.status))[0]
@@ -269,6 +272,7 @@ export default function StudioPage() {
         if (j.balance) setBalance(j.balance)
         setKeyHint('')
         setNeedLogin(false)
+        setSelectedId(null)
         poll()
       } else {
         setLoginKey(k)
@@ -351,6 +355,7 @@ export default function StudioPage() {
       /* storage unavailable */
     }
     setBalance(null)
+    setSelectedId(null)
     await fetch('/api/logout', { method: 'POST' })
     setNeedLogin(true)
     poll()
@@ -377,6 +382,7 @@ export default function StudioPage() {
       setLoginKey('')
       setKeyHint('')
       setNeedLogin(false)
+      setSelectedId(null)
       poll()
     } else {
       setLoginErr(tr(lang, 'Invalid key. Check it in your RelayDance console.'))
