@@ -8,6 +8,8 @@ import {
   FilmSlate,
   CircleNotch,
   Lightning,
+  Sun,
+  Moon,
 } from '@phosphor-icons/react'
 import { t as tr, type Lang } from '@/lib/i18n'
 import { MODELS, RATIOS, DEFAULT_SPEC, durationsFor, estimateUsd, modelById, normalizeSpec, specLabel, type Spec, type Resolution, type Ratio } from '@/lib/models'
@@ -140,6 +142,8 @@ export default function StudioPage() {
   const [spec, setSpec] = useState<Spec>(DEFAULT_SPEC)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const resumeTried = useRef<Record<string, number>>({})
   const [playbookDraft, setPlaybookDraft] = useState<string | null>(null)
   const [custom, setCustom] = useState({
     client: '',
@@ -211,6 +215,32 @@ export default function StudioPage() {
     const id = setInterval(poll, 1100)
     return () => clearInterval(id)
   }, [poll])
+
+  const applyTheme = (t: 'light' | 'dark', persist = true) => {
+    setTheme(t)
+    try {
+      document.documentElement.dataset.theme = t
+      if (persist) localStorage.setItem('aria_theme', t)
+    } catch {
+      /* no DOM or storage */
+    }
+  }
+
+  // Theme: URL (#theme= or ?theme=, so the console link can pin it), then the
+  // saved choice, then the system setting. The studio only, the landing stays dark.
+  useEffect(() => {
+    let t = ''
+    try {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const query = new URLSearchParams(window.location.search)
+      t = hash.get('theme') || query.get('theme') || localStorage.getItem('aria_theme') || ''
+      if (t !== 'light' && t !== 'dark') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+    } catch {
+      t = 'dark'
+    }
+    applyTheme(t as 'light' | 'dark', false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Key handoff from the RelayDance console link, the same way app.relaydance.com
   // takes it: #key=sk-... (preferred, the hash never reaches the server) or
@@ -353,6 +383,20 @@ export default function StudioPage() {
     }
   }
 
+  // A render interrupted by a restart is fetched automatically while the key is
+  // loaded: at most once a minute per order, and never charged again.
+  useEffect(() => {
+    if (!data || !loadKey()) return
+    const now = Date.now()
+    for (const o of data.state.orders) {
+      if (o.videoInterrupted && o.videoTaskId && !o.videoFile && now - (resumeTried.current[o.id] ?? 0) > 60000) {
+        resumeTried.current[o.id] = now
+        void post('/api/resume', { orderId: o.id }, true)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+
   if (!data) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
@@ -384,7 +428,7 @@ export default function StudioPage() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden">
       {/* header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/8 bg-[#0b0b0d] px-4">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/8 bg-base px-4">
         <div className="flex items-center gap-3">
           <a href="/" className="btn-ghost flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px]">
             <ArrowLeft size={13} /> {T('Site')}
@@ -438,6 +482,13 @@ export default function StudioPage() {
               </span>
             </>
           )}
+          <button
+            onClick={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? T('Switch to light theme') : T('Switch to dark theme')}
+            className="btn-ghost flex items-center rounded-full px-2 py-1 text-[11px]"
+          >
+            {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
+          </button>
           <button
             onClick={() => {
               langTouched.current = true
@@ -550,7 +601,7 @@ export default function StudioPage() {
                   id="s-vert"
                   value={custom.vertical}
                   onChange={(e) => setCustom({ ...custom, vertical: e.target.value })}
-                  className="w-full rounded-md border border-white/10 bg-[#131316] px-2 py-1.5 text-[11.5px] text-zinc-200 outline-none focus:border-white/30"
+                  className="w-full rounded-md border border-white/10 bg-panel px-2 py-1.5 text-[11.5px] text-zinc-200 outline-none focus:border-white/30"
                 >
                   <option>product ad</option>
                   <option>travel promo</option>
@@ -932,7 +983,7 @@ export default function StudioPage() {
                         playsInline
                         className="w-full rounded-xl border border-white/15"
                       />
-                    ) : selected.status === 'producing' ? (
+                    ) : selected.status === 'producing' && !selected.videoInterrupted ? (
                       <div className="card-quiet flex aspect-[9/16] flex-col items-center justify-center gap-3 p-4">
                         <FilmSlate size={22} className="text-zinc-200" />
                         <div className="mono text-3xl font-semibold">{selected.videoProgress ?? 0}%</div>

@@ -283,6 +283,8 @@ function createStore(): Store {
 }
 
 const S = createStore()
+// a restart marks in-flight renders as interrupted in memory; persist that right away
+if (S.state.orders.some((o) => o.videoInterrupted)) saveSoon()
 
 function getStore() {
   return S

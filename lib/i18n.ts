@@ -118,6 +118,8 @@ const zh: Record<string, string> = {
   'Upload a synthetic portrait to your private asset library': '上传合成人像到您的私域素材库',
   'Synthetic portraits only (AI generated, 3D, illustrated). Real people are rejected by the upstream audit; the liveness track is a separate enterprise option.': '仅限合成人像（AI 生成、3D、插画）。真人肖像会被上游审核拒绝，真人需走活体认证的企业通道。',
   'Portrait upload failed': '人像上传失败',
+  'Switch to light theme': '切换到浅色',
+  'Switch to dark theme': '切换到深色',
   'Custom talent': '自定义出镜人',
   'low cost, up to 720p': '低成本，最高 720p',
   'speed first, up to 720p': '速度优先，最高 720p',
