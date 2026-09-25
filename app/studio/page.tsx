@@ -212,7 +212,43 @@ export default function StudioPage() {
     return () => clearInterval(id)
   }, [poll])
 
-  const pilotMode = !!data?.tenant?.pilot
+  // Key handoff from the RelayDance console link, the same way app.relaydance.com
+  // takes it: #key=sk-... (preferred, the hash never reaches the server) or
+  // ?key= / ?api_key=. The key goes to sessionStorage and the URL is scrubbed.
+  useEffect(() => {
+    let k = ''
+    try {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const query = new URLSearchParams(window.location.search)
+      k = (hash.get('key') || query.get('key') || query.get('api_key') || '').trim()
+    } catch {
+      return
+    }
+    if (!/^sk-[A-Za-z0-9]{20,}$/.test(k)) return
+    window.history.replaceState({}, '', window.location.pathname)
+    void (async () => {
+      const r = await fetch('/api/login', { method: 'POST', headers: { Authorization: `Bearer ${k}` } })
+      if (r.ok) {
+        keyRef.current = k
+        try {
+          sessionStorage.setItem('aria_key', k)
+        } catch {
+          /* storage unavailable */
+        }
+        const j = await r.json().catch(() => ({}))
+        if (j.balance) setBalance(j.balance)
+        setKeyHint('')
+        setNeedLogin(false)
+        poll()
+      } else {
+        setLoginKey(k)
+        setLoginErr(tr(lang, 'Invalid key. Check it in your RelayDance console.'))
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const pilotMode = !!(data?.pilot || data?.tenant?.pilot)
   useEffect(() => {
     if (!pilotMode) return
     refreshBalance()
