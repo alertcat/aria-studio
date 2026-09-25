@@ -161,7 +161,9 @@ export default function Page() {
     try {
       const res = await fetch(READONLY ? '/demo-state.json' : '/api/state', { cache: 'no-store' })
       let json: ApiState = await res.json()
-      if (!READONLY && (json as unknown as { needKey?: boolean }).needKey) {
+      const flags = json as unknown as { needKey?: boolean; pilot?: boolean }
+      if (!READONLY && (flags.needKey || flags.pilot)) {
+        // pilot site: the public landing always shows the curated showcase, never a tenant's work
         json = await (await fetch('/demo-state.json', { cache: 'no-store' })).json()
         setShowcase(true)
       }
