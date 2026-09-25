@@ -3,11 +3,12 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { bradleyTerry, type Comparison } from './bt'
 import { chatOpenAI, chatClaude, reliable, cacheKey } from './llm'
-import { generateVideo, VIDEO_MODEL_MINI, fetchVideoResult } from './video'
+import { generateVideo, fetchVideoResult } from './video'
 import { generateImage } from './image'
 import { chainEnabled, settleUsdc } from './chain'
 import { startEscrowWatch } from './escrowWatch'
-import { TALENTS, talentAssetUri, warmTalents } from './talent'
+import { TALENTS, allTalents, addCustomTalent, talentAssetUri, warmTalents } from './talent'
+import { DEFAULT_SPEC, estimateUsd, modelById, normalizeSpec, specLabel, type Spec } from './models'
 import { PILOT, type Tenant, defaultTenant } from './tenant'
 
 // ============================== types ==============================
@@ -76,6 +77,8 @@ export type Order = {
   /** upstream task id, kept so an interrupted render can be fetched without paying again */
   videoTaskId?: string
   videoInterrupted?: boolean
+  /** model, resolution, duration and ratio the customer chose at the gate */
+  spec?: Spec
   feedback?: string
   invoice?: { id: string; paidAt: number; ref: string }
   error?: string
@@ -222,6 +225,8 @@ const MEDIA_DIR = tenant.mediaDir
 const COST = PILOT
   ? { concepts: 0, jury: 0, render: PILOT_ESTIMATE.renderUsd, poster: PILOT_ESTIMATE.posterUsd }
   : UNIT_COSTS
+const renderCost = (o: Order) => (PILOT ? estimateUsd(o.spec ?? DEFAULT_SPEC) : COST.render)
+const specKey = (sp: Spec) => `${sp.model}-${sp.resolution}-${sp.duration}-${sp.ratio}`
 
 type Store = {
   state: State
@@ -489,7 +494,7 @@ async function runJury(o: Order) {
   saveSoon()
 }
 
-function greenlightOrder(orderId: string, agentId?: string, talentId?: string, apiKey?: string) {
+function greenlightOrder(orderId: string, agentId?: string, talentId?: string, apiKey?: string, spec?: Spec) {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || o.status !== 'greenlight') return
   if (PILOT && !apiKey) {
@@ -498,12 +503,14 @@ function greenlightOrder(orderId: string, agentId?: string, talentId?: string, a
   }
   const pick = agentId && o.drafts.some((d) => d.agentId === agentId) ? agentId : o.ranking[0].agentId
   o.winnerAgentId = pick
-  o.talentId = talentId && TALENTS.some((t) => t.id === talentId) ? talentId : undefined
+  o.spec = normalizeSpec(spec ?? o.spec ?? DEFAULT_SPEC)
+  const roster = allTalents(DATA_DIR)
+  o.talentId = talentId && modelById(o.spec.model)?.talent && roster.some((t) => t.id === talentId) ? talentId : undefined
   agent(pick).reputation += 2
   const overrode = pick !== o.ranking[0].agentId
   ev(
     'GLGHT',
-    `CEO greenlit ${agent(pick).name}${overrode ? ' (overriding the jury pick)' : ''}, "${o.drafts.find((d) => d.agentId === pick)!.concept.concept}" goes to production${o.talentId ? ` with virtual talent ${TALENTS.find((t) => t.id === o.talentId)!.name}` : ''}`,
+    `CEO greenlit ${agent(pick).name}${overrode ? ' (overriding the jury pick)' : ''}, "${o.drafts.find((d) => d.agentId === pick)!.concept.concept}" goes to production${o.talentId ? ` with virtual talent ${roster.find((t) => t.id === o.talentId)!.name}` : ''}`,
     o.id,
   )
   saveSoon()
@@ -512,15 +519,18 @@ function greenlightOrder(orderId: string, agentId?: string, talentId?: string, a
 
 async function runProduction(o: Order, apiKey?: string) {
   const winner = o.drafts.find((d) => d.agentId === o.winnerAgentId)!
+  const spec = normalizeSpec(o.spec ?? DEFAULT_SPEC)
+  o.spec = spec
+  const model = modelById(spec.model) ?? modelById(DEFAULT_SPEC.model)!
   o.status = 'producing'
   o.videoProgress = 0
   o.videoNote = undefined
   o.videoTaskId = undefined
   o.videoInterrupted = undefined
-  ev('PROD', `Studio rendering "${winner.concept.concept}" (Seedance 2.0 mini, 5s vertical) plus campaign poster (gpt-image-2)`, o.id)
+  ev('PROD', `Studio rendering "${winner.concept.concept}" (${specLabel(spec)}) plus campaign poster (gpt-image-2)`, o.id)
   saveSoon()
 
-  const vKey = cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '')
+  const vKey = cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '', specKey(spec))
   const pKey = cacheKey(tenant.id, 'poster', o.title, o.winnerAgentId ?? '', o.revision)
   const videoName = `${o.id}_r${o.revision}.mp4`
   const posterName = `${o.id}_r${o.revision}.png`
@@ -535,7 +545,10 @@ async function runProduction(o: Order, apiKey?: string) {
       return
     }
     try {
-      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName), { apiKey })
+      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName), {
+        apiKey,
+        size: spec.ratio === '16:9' || spec.ratio === '4:3' ? '1536x1024' : spec.ratio === '1:1' ? '1024x1024' : '1024x1536',
+      })
       o.posterFile = `/m/${posterName}`
       o.cogsUsd += COST.poster
       writeMediaCache(pKey, posterName)
@@ -567,13 +580,13 @@ async function runProduction(o: Order, apiKey?: string) {
         const uri = await talentAssetUri(o.talentId, { apiKey, dataDir: DATA_DIR })
         o.talentAsset = uri
         referenceAssets = [uri]
-        const t = TALENTS.find((x) => x.id === o.talentId)!
+        const t = allTalents(DATA_DIR).find((x) => x.id === o.talentId)!
         renderPrompt =
           `@image1 (${t.name}, ${t.role.toLowerCase()}) is the on-screen presenter and the main subject of this shot: ` +
           `medium shot, their face clearly visible and turned toward the camera for the whole clip, natural expression, ` +
           `keep their face, hair and outfit exactly consistent with @image1. They interact with the product or setting described next. ` +
           `${renderPrompt} Frame the person, not just the product.`
-        ev('TALENT', `Virtual talent ${TALENTS.find((t) => t.id === o.talentId)!.name} attached from the private asset library (${uri})`, o.id)
+        ev('TALENT', `Virtual talent ${t.name} attached from the private asset library (${uri})`, o.id)
         saveSoon()
       } catch (e) {
         ev('ERR', `Talent asset unavailable (${(e as Error).message.slice(0, 60)}), rendering without a face`, o.id)
@@ -591,11 +604,13 @@ async function runProduction(o: Order, apiKey?: string) {
         saveSoon()
       },
       {
-        duration: 5,
-        ratio: '9:16',
-        model: VIDEO_MODEL_MINI,
-        maxWaitS: 480,
-        referenceAssets,
+        duration: spec.duration,
+        ratio: spec.ratio,
+        resolution: spec.resolution,
+        model: model.sku(spec.resolution),
+        family: model.family,
+        maxWaitS: spec.resolution === '4k' ? 1500 : spec.resolution === '1080p' || spec.duration > 10 ? 900 : 600,
+        referenceAssets: model.talent ? referenceAssets : undefined,
         apiKey,
         onTask: (id) => {
           o.videoTaskId = id
@@ -605,7 +620,7 @@ async function runProduction(o: Order, apiKey?: string) {
     )
     o.videoFile = `/m/${videoName}`
     o.videoProgress = 100
-    o.cogsUsd += COST.render
+    o.cogsUsd += renderCost(o)
     writeMediaCache(vKey, videoName)
   })()
 
@@ -731,9 +746,9 @@ async function resumeRender(orderId: string, apiKey?: string): Promise<{ ok: boo
       o.videoProgress = 100
       o.videoNote = undefined
       o.videoInterrupted = undefined
-      o.cogsUsd += COST.render
+      o.cogsUsd += renderCost(o)
       o.status = 'review'
-      writeMediaCache(cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? ''), videoName)
+      writeMediaCache(cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '', specKey(o.spec ?? DEFAULT_SPEC)), videoName)
       ev('PROD', `Fetched the finished render for "${o.title}" from upstream, no new charge`, o.id)
       ev('GATE', `Cut is on the CEO desk for final acceptance`, o.id)
     } else if (r.status === 'failed') {
@@ -843,6 +858,8 @@ function publicState() {
   if (!PILOT) startEscrowWatch(ev)
   return {
     tenant: { id: tenant.id, pilot: PILOT },
+    pilot: PILOT,
+    needKey: false,
     company: COMPANY,
     state: S.state,
     agents: S.agents,
@@ -850,13 +867,29 @@ function publicState() {
     templates: TEMPLATES,
     unitCosts: UNIT_COSTS,
     estimate: PILOT_ESTIMATE,
-    talents: TALENTS,
+    talents: allTalents(DATA_DIR),
   }
 }
 
   function warm(apiKey?: string) {
     if (PILOT && !apiKey) throw new Error('key required')
     return warmTalents({ apiKey, dataDir: DATA_DIR })
+  }
+
+  /** Register the tenant's own synthetic portrait as a talent. Uses the key from the request only. */
+  async function addTalent(input: { blob: Buffer; ext: string; name: string; apiKey?: string }) {
+    if (PILOT && !input.apiKey) throw new Error('key required')
+    const t = await addCustomTalent({
+      blob: input.blob,
+      ext: input.ext,
+      name: input.name,
+      ctx: { apiKey: input.apiKey, dataDir: DATA_DIR },
+      mediaDir: MEDIA_DIR,
+    })
+    ev('TALENT', `Custom talent "${t.name}" registered in the private asset library (${t.uri})`)
+    saveSoon()
+    const { uri: _uri, ...pub } = t
+    return pub
   }
 
   return {
@@ -872,10 +905,28 @@ function publicState() {
     resetCompany,
     publicState,
     warm,
+    addTalent,
   }
 }
 
 export type TenantStore = ReturnType<typeof makeStore>
+
+/** What a pilot visitor without a key sees: the workbench shell and no tenant data. */
+export function anonymousState() {
+  return {
+    tenant: null,
+    pilot: PILOT,
+    needKey: true,
+    company: COMPANY,
+    state: { orders: [], events: [], revenue: 0, delivered: 0, playbook: DEFAULT_PLAYBOOK } as State,
+    agents: WORKERS.map((w) => ({ ...w })),
+    judges: JUDGES.map((j) => j.name),
+    templates: TEMPLATES,
+    unitCosts: UNIT_COSTS,
+    estimate: PILOT_ESTIMATE,
+    talents: TALENTS,
+  }
+}
 
 const registry = ((globalThis as unknown as { __ariaStores?: Map<string, TenantStore> }).__ariaStores ??= new Map())
 

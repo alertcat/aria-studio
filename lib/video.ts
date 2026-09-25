@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-// RelayDance (Seedance 2.0) text-to-video client.
+// RelayDance video client (Seedance family and MiniMax through the same task API).
 // Submit -> poll -> download. Files land in the tenant's media dir.
 
 const RD_BASE = 'https://relaydance.com'
@@ -18,7 +18,12 @@ function key(override?: string) {
 export type VideoOpts = {
   duration?: number
   ratio?: string
+  /** 480p / 720p / 1080p / 4k for seedance SKUs; passed through to the upstream payload */
+  resolution?: string
+  /** the SKU submitted, for example doubao-seedance-2-0-mini-480p */
   model?: string
+  /** minimax takes a different request shape and no asset:// references */
+  family?: 'seedance' | 'minimax'
   maxWaitS?: number
   /** asset:// URIs from the private asset library, passed as reference images */
   referenceAssets?: string[]
@@ -29,20 +34,24 @@ export type VideoOpts = {
 }
 
 export async function submitVideo(prompt: string, opts?: VideoOpts): Promise<string> {
-  const body: Record<string, unknown> = {
-    model: opts?.model ?? VIDEO_MODEL_FAST,
-    prompt,
-    ratio: opts?.ratio ?? '9:16',
-    duration: opts?.duration ?? 5,
-  }
-  if (opts?.referenceAssets?.length) {
-    body.metadata = {
-      content: opts.referenceAssets.map((uri) => ({
+  const duration = opts?.duration ?? 5
+  const ratio = opts?.ratio ?? '9:16'
+  let body: Record<string, unknown>
+  if (opts?.family === 'minimax') {
+    // MiniMax H3: integer seconds as a string, ratio inside metadata, no asset library refs
+    body = { model: opts.model, prompt, seconds: String(Math.round(duration)), metadata: { ratio } }
+  } else {
+    // NewAPI doubao task adapter: metadata is passed through to the BytePlus payload
+    const metadata: Record<string, unknown> = { ratio, duration }
+    if (opts?.resolution) metadata.resolution = opts.resolution
+    if (opts?.referenceAssets?.length) {
+      metadata.content = opts.referenceAssets.map((uri) => ({
         type: 'image_url',
         role: 'reference_image',
         image_url: { url: uri },
-      })),
+      }))
     }
+    body = { model: opts?.model ?? VIDEO_MODEL_FAST, prompt, ratio, duration, metadata }
   }
   const res = await fetch(`${RD_BASE}/v1/video/generations`, {
     method: 'POST',
@@ -65,7 +74,7 @@ export async function pollVideoOnce(
   if (!res.ok) throw new Error(`relaydance poll ${res.status}`)
   const json = await res.json()
   const status = String(json.status || '').toLowerCase()
-  const url = json?.metadata?.url || json?.result_url
+  const url = json?.metadata?.url || json?.result_url || json?.url
   return { status, progress: Number(json.progress || 0), url }
 }
 

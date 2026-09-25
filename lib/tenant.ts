@@ -118,9 +118,15 @@ export async function validateRelaydanceKey(key: string): Promise<boolean> {
   }
 }
 
-export type Balance = { remainingUsd: number; usedUsd: number }
+/** remainingUsd is null for a key with unlimited quota (it draws on the account balance instead). */
+export type Balance = { remainingUsd: number | null; quotaUsd: number | null; usedUsd: number }
 
-/** Remaining balance for a key, from the OpenAI-style billing endpoints RelayDance exposes. */
+/**
+ * Remaining balance for a key, from the OpenAI-style billing endpoints RelayDance
+ * exposes: subscription.hard_limit_usd is the key's total quota (remaining plus
+ * used), usage.total_usage is what the key has spent in cents. A key with unlimited
+ * quota reports a sentinel of 100 million.
+ */
 export async function relaydanceBalance(key: string): Promise<Balance | null> {
   const headers = { Authorization: `Bearer ${key}` }
   try {
@@ -131,10 +137,10 @@ export async function relaydanceBalance(key: string): Promise<Balance | null> {
     if (!s.ok) return null
     const sj = await s.json()
     const uj = u.ok ? await u.json().catch(() => ({})) : {}
-    return {
-      remainingUsd: Number(sj.hard_limit_usd ?? 0),
-      usedUsd: Number(uj.total_usage ?? 0) / 100,
-    }
+    const quota = Number(sj.hard_limit_usd ?? 0)
+    const used = Number(uj.total_usage ?? 0) / 100
+    if (quota >= 1e8) return { remainingUsd: null, quotaUsd: null, usedUsd: used }
+    return { remainingUsd: Math.round((quota - used) * 100) / 100, quotaUsd: quota, usedUsd: used }
   } catch {
     return null
   }

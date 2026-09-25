@@ -10,6 +10,7 @@ import {
   Lightning,
 } from '@phosphor-icons/react'
 import { t as tr, type Lang } from '@/lib/i18n'
+import { MODELS, RATIOS, DEFAULT_SPEC, durationsFor, estimateUsd, modelById, normalizeSpec, specLabel, type Spec, type Resolution, type Ratio } from '@/lib/models'
 
 // Control Room: the live operating dashboard. Dense, functional, real pipeline.
 
@@ -58,11 +59,12 @@ type Order = {
   talentId?: string
   videoTaskId?: string
   videoInterrupted?: boolean
+  spec?: Spec
   talentAsset?: string
   invoice?: { id: string; paidAt: number; ref: string }
 }
 type Ev = { t: number; tag: string; text: string; orderId?: string }
-type Talent = { id: string; name: string; role: string; fit: string[]; file: string }
+type Talent = { id: string; name: string; role: string; fit: string[]; file: string; custom?: boolean }
 type ApiState = {
   company: { name: string; ceo: string; vertical: string }
   state: { orders: Order[]; events: Ev[]; revenue: number; delivered: number; playbook: string }
@@ -71,7 +73,9 @@ type ApiState = {
   templates: { client: string; vertical: string; title: string; brief: string; amountUsd: number }[]
   unitCosts: Record<string, number>
   talents: Talent[]
-  tenant?: { id: string; pilot: boolean }
+  tenant?: { id: string; pilot: boolean } | null
+  pilot?: boolean
+  needKey?: boolean
   estimate?: { renderUsd: number; posterUsd: number }
 }
 
@@ -130,9 +134,12 @@ export default function StudioPage() {
   const [loginErr, setLoginErr] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
   const keyRef = useRef<string>('')
-  const [balance, setBalance] = useState<{ remainingUsd: number; usedUsd: number } | null>(null)
+  const [balance, setBalance] = useState<{ remainingUsd: number | null; quotaUsd: number | null; usedUsd: number } | null>(null)
   const [keyHint, setKeyHint] = useState('')
   const [notice, setNotice] = useState('')
+  const [spec, setSpec] = useState<Spec>(DEFAULT_SPEC)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [playbookDraft, setPlaybookDraft] = useState<string | null>(null)
   const [custom, setCustom] = useState({
     client: '',
@@ -182,8 +189,8 @@ export default function StudioPage() {
         return
       }
       const json: ApiState = await res.json()
-      setNeedLogin(false)
-      if (json.tenant?.pilot && !langTouched.current) {
+      setNeedLogin(!!json.needKey)
+      if ((json.pilot || json.tenant?.pilot) && !langTouched.current) {
         langTouched.current = true
         setLang('zh')
       }
@@ -215,7 +222,7 @@ export default function StudioPage() {
   }, [pilotMode])
 
   const post = async (url: string, body?: unknown, spend = false) => {
-    const pilotNow = !!data?.tenant?.pilot
+    const pilotNow = !!(data?.pilot || data?.tenant?.pilot)
     if (spend && pilotNow && !loadKey()) {
       setKeyHint(tr(lang, 'Enter your key again to continue. It is only kept in this browser session.'))
       setNeedLogin(true)
@@ -245,6 +252,44 @@ export default function StudioPage() {
     if (spend) refreshBalance()
   }
 
+  const uploadTalent = async (f: File) => {
+    if (!loadKey()) {
+      setKeyHint(tr(lang, 'Enter your key again to continue. It is only kept in this browser session.'))
+      setNeedLogin(true)
+      return
+    }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', f)
+      fd.append('name', f.name.replace(/\.[^.]+$/, '').slice(0, 30))
+      const r = await fetch('/api/talent/upload', { method: 'POST', headers: authHeaders(), body: fd })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok && j.talent) {
+        setTalentId(j.talent.id)
+        setNotice('')
+      } else {
+        setNotice(`${tr(lang, 'Portrait upload failed')}: ${String(j.error || r.status).slice(0, 120)}`)
+      }
+    } finally {
+      setUploading(false)
+      poll()
+    }
+  }
+
+  const logout = async () => {
+    keyRef.current = ''
+    try {
+      sessionStorage.removeItem('aria_key')
+    } catch {
+      /* storage unavailable */
+    }
+    setBalance(null)
+    await fetch('/api/logout', { method: 'POST' })
+    setNeedLogin(true)
+    poll()
+  }
+
   const doLogin = async () => {
     setLoggingIn(true)
     setLoginErr('')
@@ -272,53 +317,6 @@ export default function StudioPage() {
     }
   }
 
-  if (needLogin) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center p-6">
-        <div className="card w-full max-w-[440px] p-6">
-          <div className="flex items-center justify-between">
-            <span className="display text-[18px] font-semibold tracking-tight">Aria Studio</span>
-            <button
-              onClick={() => {
-                langTouched.current = true
-                setLang(lang === 'en' ? 'zh' : 'en')
-              }}
-              className="btn-ghost rounded-full px-2.5 py-1 text-[11px]"
-            >
-              {lang === 'en' ? '中文' : 'EN'}
-            </button>
-          </div>
-          <div className="mt-5 text-[15px] font-medium">{tr(lang, 'Sign in with your RelayDance API key')}</div>
-          <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">
-            {tr(
-              lang,
-              'Your key stays in this browser session only and is cleared when you close it. The server never stores it: it is used once, in the moment you approve a render, and billing is settled by RelayDance at your account rates.',
-            )}
-          </p>
-          {keyHint && <div className="mt-2 text-[12px] text-amber-300">{keyHint}</div>}
-          <input
-            type="password"
-            value={loginKey}
-            onChange={(e) => setLoginKey(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') doLogin()
-            }}
-            placeholder="sk-..."
-            className="mono mt-4 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-[13px] outline-none focus:border-white/40"
-          />
-          {loginErr && <div className="mt-2 text-[12px] text-red-400">{loginErr}</div>}
-          <button
-            onClick={doLogin}
-            disabled={loggingIn || loginKey.trim().length < 10}
-            className="btn-primary mt-3 w-full rounded-lg px-4 py-2.5 text-[13px] font-semibold disabled:opacity-50"
-          >
-            {loggingIn ? '...' : tr(lang, 'Sign in')}
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   if (!data) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
@@ -336,11 +334,15 @@ export default function StudioPage() {
   const grossMargin =
     state.revenue > 0 ? (((state.revenue - cogsDelivered) / state.revenue) * 100).toFixed(1) : null
   const winnerDraft = selected?.drafts.find((d) => d.agentId === selected.winnerAgentId)
-  const pilot = !!data.tenant?.pilot
+  const pilot = !!(data.pilot || data.tenant?.pilot)
+  const hasKey = !!loadKey()
+  const modelDef = modelById(spec.model) ?? MODELS[0]
   const estSpend = orders.reduce((a, o) => a + (o.cogsUsd || 0), 0)
   const T = (k: string) => tr(lang, k)
   const est = data.estimate ?? { renderUsd: 0.47, posterUsd: 0.05 }
-  const preCharge = (est.renderUsd + est.posterUsd).toFixed(2)
+  const preCharge = (estimateUsd(spec) + est.posterUsd).toFixed(2)
+  const orderCharge = (o: Order) => (estimateUsd(o.spec ?? DEFAULT_SPEC) + est.posterUsd).toFixed(2)
+  const fits = (t: Talent) => !!t.custom || (!!selected && t.fit.includes(selected.vertical))
   const selectedEvents = selected ? state.events.filter((e) => e.orderId === selected.id) : []
 
   return (
@@ -377,7 +379,12 @@ export default function StudioPage() {
               </span>
               {balance && (
                 <span>
-                  {T('balance')} <span className="text-zinc-100">${balance.remainingUsd.toFixed(2)}</span>
+                  {T('balance')}{' '}
+                  <span className="text-zinc-100">
+                    {balance.remainingUsd === null
+                      ? T('unlimited')
+                      : `$${balance.remainingUsd.toFixed(2)}${balance.quotaUsd ? ` / $${balance.quotaUsd.toFixed(2)}` : ''}`}
+                  </span>
                 </span>
               )}
               {notice && <span className="text-red-400">{notice}</span>}
@@ -404,23 +411,9 @@ export default function StudioPage() {
           >
             {lang === 'en' ? '中文' : 'EN'}
           </button>
-          {pilot && (
-            <button
-              onClick={async () => {
-                keyRef.current = ''
-                try {
-                  sessionStorage.removeItem('aria_key')
-                } catch {
-                  /* storage unavailable */
-                }
-                setBalance(null)
-                await fetch('/api/logout', { method: 'POST' })
-                setData(null)
-                setNeedLogin(true)
-              }}
-              className="btn-ghost rounded-full px-2.5 py-1 text-[11px]"
-            >
-              {T('Log out')}
+          {pilot && hasKey && !needLogin && (
+            <button onClick={logout} className="btn-ghost rounded-full px-2.5 py-1 text-[11px]">
+              {T('Forget key')}
             </button>
           )}
           
@@ -431,6 +424,44 @@ export default function StudioPage() {
       <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)_370px]">
         {/* LEFT: intake + queue */}
         <div className="flex min-h-0 flex-col gap-3 overflow-y-auto border-r border-white/8 p-3">
+          {pilot && (
+            <div className={'card-quiet p-3' + (needLogin || !hasKey ? ' ring-1 ring-white/30' : '')}>
+              <div className="display text-[13.5px] font-semibold">{T('RelayDance API key')}</div>
+              {needLogin || !hasKey ? (
+                <>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">
+                    {T('Enter your RelayDance key to start. It stays in this browser session; the server never stores it and uses it only when you approve a render.')}
+                  </p>
+                  {keyHint && <div className="mt-1.5 text-[11px] text-amber-300">{keyHint}</div>}
+                  <input
+                    type="password"
+                    value={loginKey}
+                    onChange={(e) => setLoginKey(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') doLogin()
+                    }}
+                    placeholder="sk-..."
+                    className="mono mt-2 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[12px] outline-none focus:border-white/40"
+                  />
+                  {loginErr && <div className="mt-1.5 text-[11px] text-red-400">{loginErr}</div>}
+                  <button
+                    onClick={doLogin}
+                    disabled={loggingIn || loginKey.trim().length < 10}
+                    className="btn-primary mt-2 w-full rounded-md px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50"
+                  >
+                    {loggingIn ? '...' : T('Use this key')}
+                  </button>
+                </>
+              ) : (
+                <div className="mono mt-1.5 flex items-center justify-between text-[11px] text-zinc-400">
+                  <span>{T('key loaded, this browser session only')}</span>
+                  <button onClick={logout} className="btn-ghost rounded-full px-2 py-0.5 text-[10.5px]">
+                    {T('Forget key')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <div className="card-quiet p-3">
             <div className="display text-[13.5px] font-semibold">{T('Fire a brief')}</div>
             <div className="mt-2 flex flex-col gap-1.5">
@@ -438,6 +469,8 @@ export default function StudioPage() {
                 <button
                   key={i}
                   onClick={() => post('/api/orders', { template: i })}
+                  disabled={pilot && needLogin}
+                  style={pilot && needLogin ? { opacity: 0.4 } : undefined}
                   className="btn-ghost flex items-center justify-between rounded-lg px-3 py-2 text-left text-[12px]"
                 >
                   <span>
@@ -514,6 +547,8 @@ export default function StudioPage() {
               </div>
               <button
                 onClick={() => post('/api/orders', custom)}
+              disabled={pilot && needLogin}
+              style={pilot && needLogin ? { opacity: 0.4 } : undefined}
                 className="btn-primary flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold"
               >
                 <Lightning size={14} weight="bold" /> {pilot ? T('Submit and run') : T('Lock escrow and run')}
@@ -664,6 +699,61 @@ export default function StudioPage() {
                       : T('GATE 1 / pick the concept to fund. Concepts cost cents, the render costs about $0.27.')}
                   </div>
                   <div className="card-quiet mb-3 p-3">
+                    <div className="mono text-[10.5px] text-zinc-400">{T('SPEC / model, resolution, duration, ratio')}</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <select
+                        value={spec.model}
+                        onChange={(e) => setSpec(normalizeSpec({ ...spec, model: e.target.value }))}
+                        className={'rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-white/30'}
+                      >
+                        {MODELS.map((mm) => (
+                          <option key={mm.id} value={mm.id}>
+                            {mm.label} ({T(mm.note)})
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={spec.resolution}
+                        onChange={(e) => setSpec(normalizeSpec({ ...spec, resolution: e.target.value as Resolution }))}
+                        className={'rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-white/30'}
+                      >
+                        {modelDef.resolutions.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={spec.duration}
+                        onChange={(e) => setSpec(normalizeSpec({ ...spec, duration: Number(e.target.value) }))}
+                        className={'rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-white/30'}
+                      >
+                        {durationsFor(modelDef).map((d) => (
+                          <option key={d} value={d}>
+                            {d}s
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={spec.ratio}
+                        onChange={(e) => setSpec(normalizeSpec({ ...spec, ratio: e.target.value as Ratio }))}
+                        className={'rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11.5px] outline-none focus:border-white/30'}
+                      >
+                        {RATIOS.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="mono ml-auto text-[11px] text-zinc-300">
+                        {T('pre-charge')} ${preCharge}
+                      </span>
+                    </div>
+                    {!modelDef.talent && (
+                      <div className="mono mt-1.5 text-[10px] text-zinc-500">{T('this model does not take a virtual talent reference')}</div>
+                    )}
+                  </div>
+                  <div className="card-quiet mb-3 p-3">
                     <div className="flex items-baseline justify-between">
                       <div className="mono text-[10.5px] text-zinc-400">
                         {T('VIRTUAL TALENT / optional on-screen person, synthetic, cleared for commercial use')}
@@ -684,7 +774,7 @@ export default function StudioPage() {
                       </button>
                       {talents
                         .slice()
-                        .sort((a, b) => Number(b.fit.includes(selected.vertical)) - Number(a.fit.includes(selected.vertical)))
+                        .sort((a, b) => Number(fits(b)) - Number(fits(a)))
                         .map((t) => (
                           <button
                             key={t.id}
@@ -693,7 +783,7 @@ export default function StudioPage() {
                             className={
                               'tap relative h-[74px] w-[74px] overflow-hidden rounded-lg border ' +
                               (talentId === t.id ? 'border-white/70 ring-1 ring-white/40' : 'border-white/10 hover:border-white/30') +
-                              (t.fit.includes(selected.vertical) ? '' : ' opacity-50')
+                              (fits(t) ? '' : ' opacity-50')
                             }
                           >
                             <img src={t.file} alt={t.name} className="h-full w-full object-cover" />
@@ -702,7 +792,36 @@ export default function StudioPage() {
                             </span>
                           </button>
                         ))}
+                      {pilot && (
+                        <>
+                          <button
+                            onClick={() => fileRef.current?.click()}
+                            disabled={uploading || !modelDef.talent}
+                            title={T('Upload a synthetic portrait to your private asset library')}
+                            className="tap flex h-[74px] w-[74px] flex-col items-center justify-center rounded-lg border border-dashed border-white/25 text-[10px] text-zinc-400 hover:border-white/50 disabled:opacity-40"
+                          >
+                            <span className="text-[18px] leading-none">+</span>
+                            <span className="mt-1">{uploading ? '...' : T('my portrait')}</span>
+                          </button>
+                          <input
+                            ref={fileRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0]
+                              if (f) uploadTalent(f)
+                              e.target.value = ''
+                            }}
+                          />
+                        </>
+                      )}
                     </div>
+                    {pilot && (
+                      <div className="mono mt-2 text-[10px] text-zinc-500">
+                        {T('Synthetic portraits only (AI generated, 3D, illustrated). Real people are rejected by the upstream audit; the liveness track is a separate enterprise option.')}
+                      </div>
+                    )}
                   </div>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                     {selected.ranking.map((r, idx) => {
@@ -744,7 +863,7 @@ export default function StudioPage() {
                             {(r.score * 100).toFixed(0)}% / {r.wins}W
                           </div>
                           <button
-                            onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId, talentId: talentId || undefined }, true)}
+                            onClick={() => post('/api/greenlight', { orderId: selected.id, agentId: r.agentId, talentId: (modelDef.talent && talentId) || undefined, spec }, true)}
                             className={
                               'mt-3 w-full rounded-lg px-3 py-2 text-[12px] font-semibold ' +
                               (idx === 0 ? 'btn-primary' : 'btn-ghost')
@@ -788,7 +907,7 @@ export default function StudioPage() {
                           />
                         </div>
                         <div className="mono text-center text-[10px] text-zinc-500">
-                          seedance 2.0 mini / 5s / 9:16
+                          {specLabel(selected.spec ?? DEFAULT_SPEC)}
                         </div>
                       </div>
                     ) : (
@@ -856,7 +975,7 @@ export default function StudioPage() {
                     {selected.status === 'review' && (
                       <div className="mt-3">
                         <div className="mono mb-1.5 text-[11px] text-zinc-200">
-                          {pilot ? `${T('GATE 2 / accept to deliver, send back to revise')} ${T('A revision renders again, about')} $${preCharge}.` : T('GATE 2 / your acceptance releases the escrow')}
+                          {pilot ? `${T('GATE 2 / accept to deliver, send back to revise')} ${T('A revision renders again, about')} $${orderCharge(selected)}.` : T('GATE 2 / your acceptance releases the escrow')}
                         </div>
                         <div className="flex items-center gap-2">
                           <button

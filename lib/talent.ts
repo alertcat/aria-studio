@@ -12,9 +12,12 @@ export type Talent = {
   id: string
   name: string
   role: string
-  fit: string[] // verticals this talent suits
+  fit: string[] // verticals this talent suits (empty = fits everything)
   file: string // public path to portrait
+  custom?: boolean // uploaded by the tenant, lives in their media dir
 }
+
+export type CustomTalent = Talent & { uri: string; custom: true }
 
 export const TALENTS: Talent[] = [
   { id: 'mira', name: 'Mira', role: 'Consumer brand presenter', fit: ['product ad', 'brand film'], file: '/talent/mira.png' },
@@ -33,6 +36,27 @@ function key(override?: string) {
   const k = override || process.env.RELAYDANCE_API_KEY
   if (!k) throw new Error('RELAYDANCE_API_KEY missing')
   return k
+}
+
+function customPath(dataDir?: string) {
+  return path.join(dataDir || path.join(process.cwd(), 'data'), 'custom-talents.json')
+}
+export function readCustomTalents(dataDir?: string): CustomTalent[] {
+  try {
+    const list = JSON.parse(fs.readFileSync(customPath(dataDir), 'utf-8'))
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+function writeCustomTalents(list: CustomTalent[], dataDir?: string) {
+  const p = customPath(dataDir)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, JSON.stringify(list, null, 1))
+}
+/** Built-in talents plus the tenant's own uploads. */
+export function allTalents(dataDir?: string): Talent[] {
+  return [...TALENTS, ...readCustomTalents(dataDir).map(({ uri: _uri, ...t }) => t)]
 }
 
 function cachePath(ctx?: TalentCtx) {
@@ -67,38 +91,64 @@ async function j(method: string, url: string, body?: unknown, headers?: Record<s
   }
 }
 
-/** Returns the asset:// URI for a talent, registering the portrait on first use. */
-export async function talentAssetUri(talentId: string, ctx?: TalentCtx): Promise<string> {
-  const t = TALENTS.find((x) => x.id === talentId)
-  if (!t) throw new Error(`unknown talent ${talentId}`)
-  const cache = readCache(ctx)
-  if (cache[t.id]) return cache[t.id]
-  const k = ctx?.apiKey
-
-  const abs = path.join(process.cwd(), 'public', t.file)
-  const blob = fs.readFileSync(abs)
+/** Upload a portrait to the private asset library and wait until it is Active. Returns the asset:// URI. */
+export async function registerPortrait(blob: Buffer, ext: string, name: string, apiKey?: string): Promise<string> {
   const md5 = crypto.createHash('md5').update(blob).digest('hex')
-  const ext = path.extname(abs).slice(1).toLowerCase()
-
-  const u = await j('GET', `${PAY}/api/upload-url?ext=${ext}&md5=${md5}`, undefined, undefined, undefined, k)
+  const u = await j('GET', `${PAY}/api/upload-url?ext=${ext}&md5=${md5}`, undefined, undefined, undefined, apiKey)
   if (!u.exists) {
     await j('PUT', u.upload_url, undefined, { 'Content-Type': u.content_type }, blob)
   }
   const a = await j('POST', `${PAY}/api/assets/virtual/create`, {
     source_url: u.source_url,
     asset_type: 'Image',
-    name: '',
-  }, undefined, undefined, k)
+    name,
+  }, undefined, undefined, apiKey)
   let status = a.status
   for (let i = 0; i < 40 && status !== 'Active' && status !== 'Failed'; i++) {
     await new Promise((r) => setTimeout(r, 3000))
-    const s = await j('GET', `${PAY}/api/assets/${a.id}/status`, undefined, undefined, undefined, k)
+    const s = await j('GET', `${PAY}/api/assets/${a.id}/status`, undefined, undefined, undefined, apiKey)
     status = s.status
   }
-  if (status !== 'Active') throw new Error(`talent asset ${t.id} not active (${status})`)
-  cache[t.id] = a.uri
-  writeCache(cache, ctx)
+  if (status !== 'Active') throw new Error(`asset not active (${status}): the upstream audit rejects real people`)
   return a.uri
+}
+
+/** Returns the asset:// URI for a talent, registering a built-in portrait on first use. */
+export async function talentAssetUri(talentId: string, ctx?: TalentCtx): Promise<string> {
+  const custom = readCustomTalents(ctx?.dataDir).find((x) => x.id === talentId)
+  if (custom) return custom.uri
+  const t = TALENTS.find((x) => x.id === talentId)
+  if (!t) throw new Error(`unknown talent ${talentId}`)
+  const cache = readCache(ctx)
+  if (cache[t.id]) return cache[t.id]
+
+  const abs = path.join(process.cwd(), 'public', t.file)
+  const blob = fs.readFileSync(abs)
+  const ext = path.extname(abs).slice(1).toLowerCase()
+  const uri = await registerPortrait(blob, ext, '', ctx?.apiKey)
+  cache[t.id] = uri
+  writeCache(cache, ctx)
+  return uri
+}
+
+/** Save a tenant's own synthetic portrait, register it, and add it to their talent list. */
+export async function addCustomTalent(input: {
+  blob: Buffer
+  ext: string
+  name: string
+  ctx: TalentCtx
+  mediaDir: string
+}): Promise<CustomTalent> {
+  const id = 'c_' + crypto.randomBytes(4).toString('hex')
+  const fileName = `talent_${id}.${input.ext}`
+  fs.mkdirSync(input.mediaDir, { recursive: true })
+  fs.writeFileSync(path.join(input.mediaDir, fileName), input.blob)
+  const uri = await registerPortrait(input.blob, input.ext, input.name, input.ctx.apiKey)
+  const t: CustomTalent = { id, name: input.name, role: 'Custom talent', fit: [], file: `/m/${fileName}`, uri, custom: true }
+  const list = readCustomTalents(input.ctx.dataDir)
+  list.push(t)
+  writeCustomTalents(list, input.ctx.dataDir)
+  return t
 }
 
 /** Pre-register every talent so the live demo never waits on ingest. */

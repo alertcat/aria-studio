@@ -152,13 +152,19 @@ export default function Page() {
     amountUsd: 350,
     vertical: 'product ad',
   })
+  // pilot site without a key: the landing shows the curated showcase and hands actions to /studio
+  const [showcase, setShowcase] = useState(READONLY)
   const selectedRef = useRef<string | null>(null)
   selectedRef.current = selectedId
 
   const poll = useCallback(async () => {
     try {
       const res = await fetch(READONLY ? '/demo-state.json' : '/api/state', { cache: 'no-store' })
-      const json: ApiState = await res.json()
+      let json: ApiState = await res.json()
+      if (!READONLY && (json as unknown as { needKey?: boolean }).needKey) {
+        json = await (await fetch('/demo-state.json', { cache: 'no-store' })).json()
+        setShowcase(true)
+      }
       setData(json)
       if (!selectedRef.current && json.state.orders.length > 0) {
         const prio = (s: OrderStatus) =>
@@ -179,7 +185,7 @@ export default function Page() {
   }, [poll])
 
   const post = async (url: string, body?: unknown) => {
-    if (READONLY) return
+    if (READONLY || showcase) return
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -661,7 +667,7 @@ export default function Page() {
           <motion.div {...inView()}>
             <h2 className="display text-4xl font-semibold tracking-tight md:text-5xl">Run the studio</h2>
             <p className="mt-2 text-[14px] text-zinc-500">
-              {READONLY && STUDIO_HREF ? (
+              {(READONLY || showcase) && STUDIO_HREF ? (
                 <>
                   The pipeline is running live right now.{' '}
                   <a
