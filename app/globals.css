@@ -223,3 +223,14 @@ select,
 textarea {
   accent-color: #f4f4f5;
 }
+
+/* Native select popups take their colors from the control: an opaque dark
+   background and explicit option colors keep the list readable everywhere. */
+select {
+  background-color: #17171a;
+  color: #e4e4e7;
+}
+select option {
+  background-color: #17171a;
+  color: #e4e4e7;
+}
