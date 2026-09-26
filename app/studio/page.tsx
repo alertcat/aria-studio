@@ -583,9 +583,9 @@ export default function StudioPage() {
               )}
             </div>
           )}
-          <div className="card-quiet flex min-h-0 flex-1 flex-col p-3">
+          <div className="card-quiet flex shrink-0 flex-col p-3">
             <div className="display text-[13.5px] font-semibold">{T('Queue')}</div>
-            <div className="mt-2 min-h-[38vh] flex-1 space-y-1.5 overflow-y-auto">
+            <div className="mt-2 max-h-[46vh] min-h-[22vh] space-y-1.5 overflow-y-auto pr-1">
               {queueGroups.map((g) => (
                 <div key={g.key} className="space-y-1.5">
                   {showGroupHeaders && (
