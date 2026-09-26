@@ -322,7 +322,7 @@ function agent(id: string) {
 function briefLang(o?: Order): 'zh' | 'en' {
   return o && /[\u4e00-\u9fff]/.test(o.title + ' ' + o.brief) ? 'zh' : 'en'
 }
-const langName = (o?: Order) => (briefLang(o) === 'zh' ? 'Simplified Chinese' : 'the language of the brief')
+const langName = (o?: Order) => (briefLang(o) === 'zh' ? 'Simplified Chinese' : 'English')
 
 function workerSystem(w: AgentDef, playbook: string, o?: Order) {
   return `You are ${w.name}, ${w.role} at Aria Studio, a one-person media production company where a human CEO directs AI creative agents. Your signature craft: ${w.style}.
@@ -499,7 +499,7 @@ async function runJury(o: Order) {
   o.status = 'greenlight'
   ev(
     'RANK',
-    `Bradley-Terry ranking in: ${agent(o.ranking[0].agentId).name} leads at ${(o.ranking[0].score * 100).toFixed(0)}%. Awaiting CEO greenlight before render spend`,
+    `Bradley-Terry ranking in: ${agent(o.ranking[0].agentId).name} leads at ${(o.ranking[0].score * 100).toFixed(0)}%. Awaiting greenlight before render spend`,
     o.id,
   )
   saveSoon()
