@@ -94,8 +94,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 }
 
 /** The language an order was fired in; older orders fall back to detecting Chinese in the text. */
-function orderLangOf(o: { lang?: 'zh' | 'en'; title: string; brief: string }): Lang {
-  if (o.lang === 'zh' || o.lang === 'en') return o.lang
+function orderLangOf(o: { title: string; brief: string }): Lang {
   return /[\u4e00-\u9fff]/.test(o.title + ' ' + o.brief) ? 'zh' : 'en'
 }
 
@@ -584,8 +583,51 @@ export default function StudioPage() {
               )}
             </div>
           )}
-          <div className="card-quiet p-3">
-            <div className="display text-[13.5px] font-semibold">{T('Fire a brief')}</div>
+          <div className="card-quiet flex min-h-0 flex-1 flex-col p-3">
+            <div className="display text-[13.5px] font-semibold">{T('Queue')}</div>
+            <div className="mt-2 min-h-[38vh] flex-1 space-y-1.5 overflow-y-auto">
+              {queueGroups.map((g) => (
+                <div key={g.key} className="space-y-1.5">
+                  {showGroupHeaders && (
+                    <div className="mono pt-1 text-[10.5px] uppercase tracking-wide text-zinc-500">
+                      {g.label} ({g.items.length})
+                    </div>
+                  )}
+              {g.items.map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => setSelectedId(o.id)}
+                  className={
+                    'tap w-full rounded-lg border p-3 text-left transition-colors ' +
+                    (selectedId === o.id
+                      ? 'border-white/25 bg-white/[0.04]'
+                      : 'border-white/8 bg-white/[0.02] hover:border-white/20')
+                  }
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12.5px] font-medium">{o.title}</span>
+                    <span className={statusChip(o.status)}>{T(STATUS_LABEL[o.status])}</span>
+                  </div>
+                  <div className="mono mt-1 text-[11px] text-zinc-500">
+                    {o.client} / {pilot ? T(o.vertical) : money(o.amountUsd)}
+                  </div>
+                  {o.status === 'producing' && (
+                    <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-zinc-200 transition-all"
+                        style={{ width: `${o.videoProgress ?? 2}%` }}
+                      />
+                    </div>
+                  )}
+                </button>
+              ))}
+                </div>
+              ))}
+              {orders.length === 0 && <div className="text-[11.5px] text-zinc-600">{T('No orders yet. Fire a brief.')}</div>}
+            </div>
+          </div>
+          <details className="card-quiet p-3" open={orders.length === 0}>
+            <summary className="display cursor-pointer text-[13.5px] font-semibold">{T('Fire a brief')}</summary>
             <div className="mt-2 flex flex-col gap-1.5">
               {templates.map((t, i) => (
                 <button
@@ -676,7 +718,7 @@ export default function StudioPage() {
                 <Lightning size={14} weight="bold" /> {pilot ? T('Submit and run') : T('Lock escrow and run')}
               </button>
             </div>
-          </div>
+          </details>
 
           <details className="card-quiet p-3">
             <summary className="display cursor-pointer text-[13.5px] font-semibold">{T('CEO Playbook')}</summary>
@@ -694,49 +736,6 @@ export default function StudioPage() {
             </button>
           </details>
 
-          <div className="card-quiet flex min-h-0 flex-1 flex-col p-3">
-            <div className="display text-[13.5px] font-semibold">{T('Queue')}</div>
-            <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-              {queueGroups.map((g) => (
-                <div key={g.key} className="space-y-1.5">
-                  {showGroupHeaders && (
-                    <div className="mono pt-1 text-[10px] uppercase tracking-wide text-zinc-500">
-                      {g.label} ({g.items.length})
-                    </div>
-                  )}
-              {g.items.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => setSelectedId(o.id)}
-                  className={
-                    'tap w-full rounded-lg border p-2.5 text-left transition-colors ' +
-                    (selectedId === o.id
-                      ? 'border-white/25 bg-white/[0.04]'
-                      : 'border-white/8 bg-white/[0.02] hover:border-white/20')
-                  }
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[11.5px] font-medium">{o.title}</span>
-                    <span className={statusChip(o.status)}>{T(STATUS_LABEL[o.status])}</span>
-                  </div>
-                  <div className="mono mt-0.5 text-[10.5px] text-zinc-500">
-                    {o.client} / {pilot ? T(o.vertical) : money(o.amountUsd)}
-                  </div>
-                  {o.status === 'producing' && (
-                    <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-zinc-200 transition-all"
-                        style={{ width: `${o.videoProgress ?? 2}%` }}
-                      />
-                    </div>
-                  )}
-                </button>
-              ))}
-                </div>
-              ))}
-              {orders.length === 0 && <div className="text-[11.5px] text-zinc-600">{T('No orders yet. Fire a brief.')}</div>}
-            </div>
-          </div>
         </div>
 
         {/* CENTER: the stage */}
