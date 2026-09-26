@@ -12,7 +12,7 @@ import {
   Moon,
 } from '@phosphor-icons/react'
 import { t as tr, type Lang } from '@/lib/i18n'
-import { MODELS, RATIOS, DEFAULT_SPEC, durationsFor, estimateUsd, modelById, normalizeSpec, specLabel, type Spec, type Resolution, type Ratio } from '@/lib/models'
+import { MODELS, RATIOS, DEFAULT_SPEC, POSTER_USD, durationsFor, modelById, normalizeSpec, preChargeUsd, specLabel, type Spec, type Resolution, type Ratio } from '@/lib/models'
 
 // Control Room: the live operating dashboard. Dense, functional, real pipeline.
 
@@ -139,7 +139,7 @@ export default function StudioPage() {
   const [balance, setBalance] = useState<{ remainingUsd: number | null; quotaUsd: number | null; usedUsd: number } | null>(null)
   const [keyHint, setKeyHint] = useState('')
   const [notice, setNotice] = useState('')
-  const [spec, setSpec] = useState<Spec>(DEFAULT_SPEC)
+  const [spec, setSpec] = useState<Spec>({ ...DEFAULT_SPEC, poster: false })
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
@@ -283,6 +283,10 @@ export default function StudioPage() {
   }, [])
 
   const pilotMode = !!(data?.pilot || data?.tenant?.pilot)
+  const loaded = !!data
+  useEffect(() => {
+    if (loaded && !pilotMode) setSpec((sp) => ({ ...sp, poster: true }))
+  }, [pilotMode, loaded])
   useEffect(() => {
     if (!pilotMode) return
     refreshBalance()
@@ -313,6 +317,9 @@ export default function StudioPage() {
       setNotice(
         `${tr(lang, 'Insufficient RelayDance balance')}: $${Number(j.remainingUsd ?? 0).toFixed(2)} < $${Number(j.needUsd ?? 0).toFixed(2)}`,
       )
+    } else if (r.status === 429) {
+      const j = await r.json().catch(() => ({}))
+      setNotice(tr(lang, String(j.reason || 'The studio is busy right now, try again in a minute.')))
     } else if (r.status === 403) {
       setNotice(tr(lang, 'This key does not match the current session. Log out and sign in again.'))
     } else {
@@ -425,9 +432,8 @@ export default function StudioPage() {
   const modelDef = modelById(spec.model) ?? MODELS[0]
   const estSpend = orders.reduce((a, o) => a + (o.cogsUsd || 0), 0)
   const T = (k: string) => tr(lang, k)
-  const est = data.estimate ?? { renderUsd: 0.47, posterUsd: 0.05 }
-  const preCharge = (estimateUsd(spec) + est.posterUsd).toFixed(2)
-  const orderCharge = (o: Order) => (estimateUsd(o.spec ?? DEFAULT_SPEC) + est.posterUsd).toFixed(2)
+  const preCharge = preChargeUsd(spec).toFixed(2)
+  const orderCharge = (o: Order) => preChargeUsd(o.spec ?? DEFAULT_SPEC).toFixed(2)
   const fits = (t: Talent) => !!t.custom || (!!selected && t.fit.includes(selected.vertical))
   const selectedEvents = selected ? state.events.filter((e) => e.orderId === selected.id) : []
 
@@ -569,7 +575,7 @@ export default function StudioPage() {
                   <span>
                     {t.client} <span className="text-zinc-500">/ {T(t.vertical)}</span>
                   </span>
-                  <span className="mono text-zinc-400">{money(t.amountUsd)}</span>
+                  {!pilot && <span className="mono text-zinc-400">{money(t.amountUsd)}</span>}
                 </button>
               ))}
             </div>
@@ -588,7 +594,7 @@ export default function StudioPage() {
                 </div>
                 <div>
                   <label htmlFor="s-usd" className="mb-0.5 block text-[10.5px] text-zinc-500">
-                    {T('Budget')}
+                    {pilot ? T('Reference budget, not billed') : T('Budget')}
                   </label>
                   <input
                     id="s-usd"
@@ -684,7 +690,7 @@ export default function StudioPage() {
                     <span className={statusChip(o.status)}>{T(STATUS_LABEL[o.status])}</span>
                   </div>
                   <div className="mono mt-0.5 text-[10.5px] text-zinc-500">
-                    {o.client} / {money(o.amountUsd)}
+                    {o.client} / {pilot ? T(o.vertical) : money(o.amountUsd)}
                   </div>
                   {o.status === 'producing' && (
                     <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
@@ -712,8 +718,12 @@ export default function StudioPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="mono text-[11px] text-zinc-500">
-                    {selected.client} / {T(selected.vertical)} /{' '}
-                    <span className="text-zinc-300">{money(selected.amountUsd)} {pilot ? T('budget') : T('in escrow')}</span>
+                    {selected.client} / {T(selected.vertical)}
+                    {!pilot && (
+                      <>
+                        {' '}/ <span className="text-zinc-300">{money(selected.amountUsd)} {T('in escrow')}</span>
+                      </>
+                    )}
                     {selected.revision > 0 && <span className="text-amber-400"> / rev {selected.revision}</span>}
                   </div>
                   <h1 className="display mt-0.5 text-[22px] font-semibold tracking-tight">{selected.title}</h1>
@@ -838,6 +848,14 @@ export default function StudioPage() {
                           </option>
                         ))}
                       </select>
+                      <label className="mono flex items-center gap-1.5 text-[11px] text-zinc-400">
+                        <input
+                          type="checkbox"
+                          checked={spec.poster !== false}
+                          onChange={(e) => setSpec({ ...spec, poster: e.target.checked })}
+                        />
+                        {T('poster')} +${POSTER_USD.toFixed(2)}
+                      </label>
                       <span className="mono ml-auto text-[11px] text-zinc-300">
                         {T('pre-charge')} ${preCharge}
                       </span>
@@ -1018,6 +1036,26 @@ export default function StudioPage() {
                         )}
                       </div>
                     )}
+                    {selected.videoFile && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <a
+                          href={selected.videoFile}
+                          download={`${selected.id}_r${selected.revision}.mp4`}
+                          className="btn-ghost rounded-full px-3 py-1 text-[11px]"
+                        >
+                          {T('Download clip')}
+                        </a>
+                        {selected.posterFile && (
+                          <a
+                            href={selected.posterFile}
+                            download={`${selected.id}_r${selected.revision}.png`}
+                            className="btn-ghost rounded-full px-3 py-1 text-[11px]"
+                          >
+                            {T('Download poster')}
+                          </a>
+                        )}
+                      </div>
+                    )}
                     {selected.posterFile && (
                       <img
                         src={selected.posterFile}
@@ -1102,7 +1140,7 @@ export default function StudioPage() {
                         <div className="flex items-center justify-between">
                           <span className="mono text-[12px] font-medium text-zinc-200">{selected.invoice.id}</span>
                           <span className="mono text-[12.5px] font-semibold text-emerald-400">
-                            {money(selected.amountUsd)} settled
+                            {pilot ? T('accepted') : `${money(selected.amountUsd)} settled`}
                           </span>
                         </div>
                         <div className="mono mt-1 break-all text-[10.5px] text-zinc-600">

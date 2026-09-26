@@ -8,7 +8,14 @@
 
 export type Resolution = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
 export type Ratio = '9:16' | '16:9' | '1:1' | '4:3' | '3:4'
-export type Spec = { model: string; resolution: Resolution; duration: number; ratio: Ratio }
+export type Spec = {
+  model: string
+  resolution: Resolution
+  duration: number
+  ratio: Ratio
+  /** also generate a gpt-image-2 campaign poster (billed to the same key); pilot defaults to off */
+  poster?: boolean
+}
 
 export type VideoModel = {
   id: string
@@ -162,7 +169,17 @@ export function normalizeSpec(input: unknown): Spec {
   const wanted = Number(i.duration)
   const duration = Number.isFinite(wanted) ? Math.min(m.maxDuration, Math.max(m.minDuration, Math.round(wanted))) : Math.max(m.minDuration, 5)
   const ratio = RATIOS.includes(i.ratio as Ratio) ? (i.ratio as Ratio) : DEFAULT_SPEC.ratio
-  return { model: m.id, resolution, duration, ratio }
+  // callers that never mention the poster (demo mode, older clients) keep it
+  const poster = i.poster === undefined ? true : !!i.poster
+  return { model: m.id, resolution, duration, ratio, poster }
+}
+
+/** Poster line item, USD, retail cap for a gpt-image-2 key visual. */
+export const POSTER_USD = 0.05
+
+/** Full pre-charge for a spec: the render plus the poster when it is on. */
+export function preChargeUsd(spec: Spec): number {
+  return Math.round((estimateUsd(spec) + (spec.poster === false ? 0 : POSTER_USD)) * 100) / 100
 }
 
 export function specLabel(spec: Spec): string {

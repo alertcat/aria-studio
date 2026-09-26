@@ -318,14 +318,22 @@ function agent(id: string) {
 
 // ============================== prompts ==============================
 
-function workerSystem(w: AgentDef, playbook: string) {
+/** Simplified Chinese when the brief is written in Chinese, otherwise the brief's own language. */
+function briefLang(o?: Order): 'zh' | 'en' {
+  return o && /[\u4e00-\u9fff]/.test(o.title + ' ' + o.brief) ? 'zh' : 'en'
+}
+const langName = (o?: Order) => (briefLang(o) === 'zh' ? 'Simplified Chinese' : 'the language of the brief')
+
+function workerSystem(w: AgentDef, playbook: string, o?: Order) {
   return `You are ${w.name}, ${w.role} at Aria Studio, a one-person media production company where a human CEO directs AI creative agents. Your signature craft: ${w.style}.
 
 The CEO Playbook below is the human founder's creative quality bar. It overrides everything:
 ${playbook}
 
 Task: produce ONE concept for the client brief. Reply ONLY with minified JSON, no markdown fences, exactly this shape:
-{"concept":"two word name","hook":"what stops the scroll in the first half second, one sentence","beats":["beat 1","beat 2","beat 3"],"style":"visual treatment in ten words","video_prompt":"60-100 word English prompt for a text-to-video model: one continuous photorealistic shot, concrete subject and setting, explicit camera movement, lighting, mood, pacing. No on-screen text, no logos, no brand names, no watermarks."}`
+{"concept":"two word name","hook":"what stops the scroll in the first half second, one sentence","beats":["beat 1","beat 2","beat 3"],"style":"visual treatment in ten words","video_prompt":"60-100 word English prompt for a text-to-video model: one continuous photorealistic shot, concrete subject and setting, explicit camera movement, lighting, mood, pacing. No on-screen text, no logos, no brand names, no watermarks."}
+
+Language: write "concept", "hook", "beats" and "style" in ${langName(o)}. "video_prompt" must always be English.`
 }
 
 function orderUser(o: Order) {
@@ -336,10 +344,11 @@ function orderUser(o: Order) {
   return u
 }
 
-function judgeSystem(j: { name: string; criterion: string }) {
+function judgeSystem(j: { name: string; criterion: string }, o?: Order) {
   return `You are ${j.name} on the creative jury of Aria Studio. Two anonymous concepts (A and B) answer the same paid client brief. Your single criterion: ${j.criterion}.
 
-Reply ONLY with minified JSON: {"winner":"A"|"B","reason":"one crisp sentence, max 18 words"}`
+Reply ONLY with minified JSON: {"winner":"A"|"B","reason":"one crisp sentence, max 18 words"}
+Write the reason in ${langName(o)}.`
 }
 
 function duelUser(o: Order, a: Draft, b: Draft) {
@@ -418,7 +427,7 @@ async function conceptOne(o: Order, w: AgentDef): Promise<Draft> {
   const { content, cached } = await reliable(
     key,
     () =>
-      chatOpenAI({ system: workerSystem(w, S.state.playbook), user: orderUser(o), maxTokens: 2200 }),
+      chatOpenAI({ system: workerSystem(w, S.state.playbook, o), user: orderUser(o), maxTokens: 2200 }),
     () => JSON.stringify(fallbackConcept(w, o)),
   )
   await pace(cached, 2000, 3500)
@@ -445,7 +454,7 @@ async function runJury(o: Order) {
       const key = cacheKey(tenant.id, 'duel', o.title, A.agentId, B.agentId, judge.id, o.revision)
       const { content, cached } = await reliable(
         key,
-        () => chatClaude({ system: judgeSystem(judge), user: duelUser(o, A, B) }),
+        () => chatClaude({ system: judgeSystem(judge, o), user: duelUser(o, A, B) }),
         fallbackVerdict,
       )
       await pace(cached, 800, 1600)
@@ -512,7 +521,7 @@ function greenlightOrder(orderId: string, agentId?: string, talentId?: string, a
   const overrode = pick !== o.ranking[0].agentId
   ev(
     'GLGHT',
-    `CEO greenlit ${agent(pick).name}${overrode ? ' (overriding the jury pick)' : ''}, "${o.drafts.find((d) => d.agentId === pick)!.concept.concept}" goes to production${o.talentId ? ` with virtual talent ${roster.find((t) => t.id === o.talentId)!.name}` : ''}`,
+    `Greenlit ${agent(pick).name}${overrode ? ' (overriding the jury pick)' : ''}, "${o.drafts.find((d) => d.agentId === pick)!.concept.concept}" goes to production${o.talentId ? ` with virtual talent ${roster.find((t) => t.id === o.talentId)!.name}` : ''}`,
     o.id,
   )
   saveSoon()
@@ -529,7 +538,7 @@ async function runProduction(o: Order, apiKey?: string) {
   o.videoNote = undefined
   o.videoTaskId = undefined
   o.videoInterrupted = undefined
-  ev('PROD', `Studio rendering "${winner.concept.concept}" (${specLabel(spec)}) plus campaign poster (gpt-image-2)`, o.id)
+  ev('PROD', `Studio rendering "${winner.concept.concept}" (${specLabel(spec)})${spec.poster === false ? '' : ' plus campaign poster (gpt-image-2)'}`, o.id)
   saveSoon()
 
   const vKey = cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '', specKey(spec))
@@ -537,7 +546,7 @@ async function runProduction(o: Order, apiKey?: string) {
   const videoName = `${o.id}_r${o.revision}.mp4`
   const posterName = `${o.id}_r${o.revision}.png`
 
-  const posterTask = (async () => {
+  const posterTask = spec.poster === false ? Promise.resolve() : (async () => {
     const { cachedVideoFile: cachedPoster } = readMediaCache(pKey)
     if (cachedPoster && fs.existsSync(path.join(MEDIA_DIR, cachedPoster))) {
       await sleep(2500 + Math.random() * 2000)
@@ -629,7 +638,7 @@ async function runProduction(o: Order, apiKey?: string) {
   try {
     await Promise.all([videoTask, posterTask])
     o.status = 'review'
-    ev('GATE', `Cut and key visual are on the CEO desk for final acceptance`, o.id)
+    ev('GATE', `Cut and key visual are ready for your acceptance`, o.id)
   } catch (e) {
     const msg = (e as Error).message
     console.error('[video] render failed:', msg)
@@ -701,7 +710,7 @@ async function runRevision(orderId: string, feedback: string, apiKey?: string) {
     o.revision += 1
     o.feedback = feedback
     const w = agent(o.winnerAgentId)
-    ev('REV', `CEO sent "${o.title}" back to ${w.name} with notes`, o.id)
+    ev('REV', `Sent "${o.title}" back to ${w.name} with notes`, o.id)
     saveSoon()
 
     w.status = 'working'
@@ -711,7 +720,7 @@ async function runRevision(orderId: string, feedback: string, apiKey?: string) {
       key,
       () =>
         chatOpenAI({
-          system: workerSystem(w, S.state.playbook),
+          system: workerSystem(w, S.state.playbook, o),
           user: `${orderUser(o)}\n\nYOUR PREVIOUS CONCEPT (improve it, keep what worked):\n${JSON.stringify(prev.concept)}`,
           maxTokens: 2200,
         }),
@@ -752,7 +761,7 @@ async function resumeRender(orderId: string, apiKey?: string): Promise<{ ok: boo
       o.status = 'review'
       writeMediaCache(cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '', specKey(o.spec ?? DEFAULT_SPEC)), videoName)
       ev('PROD', `Fetched the finished render for "${o.title}" from upstream, no new charge`, o.id)
-      ev('GATE', `Cut is on the CEO desk for final acceptance`, o.id)
+      ev('GATE', `Cut is ready for your acceptance`, o.id)
     } else if (r.status === 'failed') {
       o.videoNote = 'Upstream render failed and was refunded. Approve again to re-render.'
       o.videoInterrupted = undefined
@@ -787,7 +796,9 @@ function approveOrder(orderId: string) {
     paidAt: Date.now(),
     ref: !PILOT && chainEnabled()
       ? 'Settling USDC on Base Sepolia...'
-      : `0x${hash.slice(0, 40)} (Base Sepolia, simulated settlement)`,
+      : PILOT
+        ? 'accepted at the gate'
+        : `0x${hash.slice(0, 40)} (Base Sepolia, simulated settlement)`,
   }
   if (!PILOT && chainEnabled()) {
     void (async () => {
@@ -814,7 +825,9 @@ function approveOrder(orderId: string) {
   const margin = o.amountUsd > 0 ? (((o.amountUsd - o.cogsUsd) / o.amountUsd) * 100).toFixed(1) : '0'
   ev(
     'PAID',
-    `CEO accepted "${o.title}". Escrow released: +$${o.amountUsd}, COGS $${o.cogsUsd.toFixed(2)}, margin ${margin}%. ${o.invoice.id} sent to ${o.client}`,
+    PILOT
+      ? `Accepted "${o.title}". Render spend $${o.cogsUsd.toFixed(2)}. ${o.invoice.id} filed for ${o.client}`
+      : `CEO accepted "${o.title}". Escrow released: +$${o.amountUsd}, COGS $${o.cogsUsd.toFixed(2)}, margin ${margin}%. ${o.invoice.id} sent to ${o.client}`,
     o.id,
   )
   saveSoon()
@@ -843,7 +856,13 @@ function createOrder(input: {
     ranking: [],
   }
   S.state.orders.unshift(o)
-  ev('ESCROW', `New brief from ${o.client} (${o.vertical}): "${o.title}", $${o.amountUsd} locked in escrow`, o.id)
+  ev(
+    PILOT ? 'BRIEF' : 'ESCROW',
+    PILOT
+      ? `New brief from ${o.client} (${o.vertical}): "${o.title}"`
+      : `New brief from ${o.client} (${o.vertical}): "${o.title}", $${o.amountUsd} locked in escrow`,
+    o.id,
+  )
   saveSoon()
   return o
 }
@@ -878,6 +897,16 @@ function publicState() {
     return warmTalents({ apiKey, dataDir: DATA_DIR })
   }
 
+  /** Orders currently occupying the pipeline (concepts, jury, render, revision). */
+  function activeCount(exclude?: string) {
+    return S.state.orders.filter((o) => o.id !== exclude && ACTIVE_STATUS.has(o.status)).length
+  }
+  /** Orders this tenant created in the last 24 hours. */
+  function createdLast24h() {
+    const since = Date.now() - 24 * 3600 * 1000
+    return S.state.orders.filter((o) => o.createdAt >= since).length
+  }
+
   /** Register the tenant's own synthetic portrait as a talent. Uses the key from the request only. */
   async function addTalent(input: { blob: Buffer; ext: string; name: string; apiKey?: string }) {
     if (PILOT && !input.apiKey) throw new Error('key required')
@@ -908,10 +937,24 @@ function publicState() {
     publicState,
     warm,
     addTalent,
+    activeCount,
+    createdLast24h,
   }
 }
 
 export type TenantStore = ReturnType<typeof makeStore>
+
+const ACTIVE_STATUS = new Set<OrderStatus>(['concepting', 'jury', 'producing', 'revising'])
+
+/** Pilot budgets: concepts and jury run on the studio's own keys, so a key gets a fair share. */
+export const LIMITS = { concurrentPerTenant: 1, perDay: 20, totalPerTenant: 60, concurrentGlobal: 5 }
+
+/** Jobs in flight across every tenant this process serves. */
+export function globalActiveCount(exclude?: string) {
+  let n = 0
+  for (const st of registry.values()) n += st.activeCount(exclude)
+  return n
+}
 
 /** What a pilot visitor without a key sees: the workbench shell and no tenant data. */
 export function anonymousState() {
