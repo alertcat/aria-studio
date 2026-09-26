@@ -84,12 +84,14 @@ async function relayrouterOnce(
   }
 }
 
-// ---------- directors: GPT on the founder's relay, Claude Haiku as the safety net ----------
-// Order of preference is the founder's: gpt-5.4-mini, then gpt-5.6-luna, then
-// claude-haiku-4-5. Each step is tried once; a gateway error or timeout moves on.
+// ---------- directors: Claude on the founder's relay ----------
+// Order of preference is the founder's: claude-opus-5-5 for quality (about 12 s
+// per concept), claude-sonnet-5 next, claude-haiku-4-5 as the safety net. Each
+// step is tried once; a gateway error or timeout moves on. The GPT pool on the
+// relay is kept out: its accounts were failing or answering in over a minute.
 const DIRECTOR_CHAIN = [
-  { model: 'gpt-5.4-mini', keyEnv: 'RELAYROUTER_GPT_KEY', tokenField: 'max_completion_tokens' as const, reasoning: true, timeoutMs: 75_000 },
-  { model: 'gpt-5.6-luna', keyEnv: 'RELAYROUTER_GPT_KEY', tokenField: 'max_completion_tokens' as const, reasoning: true, timeoutMs: 75_000 },
+  { model: 'claude-opus-5-5', keyEnv: 'RELAYROUTER_API_KEY', tokenField: 'max_tokens' as const, reasoning: false, timeoutMs: 90_000 },
+  { model: 'claude-sonnet-5', keyEnv: 'RELAYROUTER_API_KEY', tokenField: 'max_tokens' as const, reasoning: false, timeoutMs: 90_000 },
   { model: 'claude-haiku-4-5-20251001', keyEnv: 'RELAYROUTER_API_KEY', tokenField: 'max_tokens' as const, reasoning: false, timeoutMs: 90_000 },
 ]
 
@@ -105,8 +107,10 @@ export async function chatDirector(opts: ChatOpts): Promise<string> {
     if (!apiKey) continue
     if (Date.now() - (downSince[step.model] ?? 0) < DOWN_FOR_MS) continue
     try {
+      const t0 = Date.now()
       const out = await relayrouterOnce({ ...opts, model: step.model, apiKey, tokenField: step.tokenField, reasoning: step.reasoning, timeoutMs: step.timeoutMs })
       delete downSince[step.model]
+      console.log(`[llm] director ok: ${step.model} in ${((Date.now() - t0) / 1000).toFixed(1)}s`)
       return out
     } catch (e) {
       downSince[step.model] = Date.now()
