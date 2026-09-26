@@ -333,7 +333,7 @@ ${playbook}
 Task: produce ONE concept for the client brief. Reply ONLY with minified JSON, no markdown fences, exactly this shape:
 {"concept":"two word name","hook":"what stops the scroll in the first half second, one sentence","beats":["beat 1","beat 2","beat 3"],"style":"visual treatment in ten words","video_prompt":"60-100 word English prompt for a text-to-video model: one continuous photorealistic shot, concrete subject and setting, explicit camera movement, lighting, mood, pacing. No on-screen text, no logos, no brand names, no watermarks."}
 
-Language: write "concept", "hook", "beats" and "style" in ${langName(o)}. "video_prompt" must always be English.`
+Language: write "concept", "hook", "beats" and "style" in ${langName(o)}. "video_prompt" must always be English. Plain punctuation only, no em dashes.`
 }
 
 function orderUser(o: Order) {
@@ -348,7 +348,7 @@ function judgeSystem(j: { name: string; criterion: string }, o?: Order) {
   return `You are ${j.name} on the creative jury of Aria Studio. Two anonymous concepts (A and B) answer the same paid client brief. Your single criterion: ${j.criterion}.
 
 Reply ONLY with minified JSON: {"winner":"A"|"B","reason":"one crisp sentence, max 18 words"}
-Write the reason in ${langName(o)}.`
+Write the reason in ${langName(o)}, plain punctuation, no em dashes.`
 }
 
 function duelUser(o: Order, a: Draft, b: Draft) {
