@@ -62,6 +62,7 @@ type Order = {
   videoTaskId?: string
   videoInterrupted?: boolean
   spec?: Spec
+  lang?: 'zh' | 'en'
   talentAsset?: string
   invoice?: { id: string; paidAt: number; ref: string }
 }
@@ -90,6 +91,12 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   review: 'At the gate',
   revising: 'Revising',
   delivered: 'Paid',
+}
+
+/** The language an order was fired in; older orders fall back to detecting Chinese in the text. */
+function orderLangOf(o: { lang?: 'zh' | 'en'; title: string; brief: string }): Lang {
+  if (o.lang === 'zh' || o.lang === 'en') return o.lang
+  return /[\u4e00-\u9fff]/.test(o.title + ' ' + o.brief) ? 'zh' : 'en'
 }
 
 const TAG_STYLE: Record<string, string> = {
@@ -130,6 +137,8 @@ export default function StudioPage() {
   const [feedbackText, setFeedbackText] = useState('')
   const [talentId, setTalentId] = useState<string>('')
   const [lang, setLang] = useState<Lang>('en')
+  const langRef = useRef<Lang>('en')
+  langRef.current = lang
   const langTouched = useRef(false)
   const [needLogin, setNeedLogin] = useState(false)
   const [loginKey, setLoginKey] = useState('')
@@ -205,7 +214,10 @@ export default function StudioPage() {
       } else if (!present) {
         const prio = (s: OrderStatus) =>
           ({ greenlight: 0, review: 1, producing: 2, revising: 2, jury: 3, concepting: 4, inbox: 5, delivered: 6 })[s]
-        const hot = [...json.state.orders].sort((a, b) => prio(a.status) - prio(b.status))[0]
+        const hot = [...json.state.orders].sort(
+          (a, b) =>
+            Number(orderLangOf(b) === langRef.current) - Number(orderLangOf(a) === langRef.current) || prio(a.status) - prio(b.status),
+        )[0]
         setSelectedId(hot.id)
       }
     } catch {
@@ -440,6 +452,12 @@ export default function StudioPage() {
   const preCharge = preChargeUsd(spec).toFixed(2)
   const orderCharge = (o: Order) => preChargeUsd(o.spec ?? DEFAULT_SPEC).toFixed(2)
   const fits = (t: Talent) => !!t.custom || (!!selected && t.fit.includes(selected.vertical))
+  const otherLang: Lang = lang === 'zh' ? 'en' : 'zh'
+  const queueGroups = [
+    { key: lang, label: lang === 'zh' ? '中文' : 'EN', items: orders.filter((o) => orderLangOf(o) === lang) },
+    { key: otherLang, label: otherLang === 'zh' ? '中文' : 'EN', items: orders.filter((o) => orderLangOf(o) === otherLang) },
+  ].filter((g) => g.items.length > 0)
+  const showGroupHeaders = queueGroups.length > 1
   const selectedEvents = selected ? state.events.filter((e) => e.orderId === selected.id) : []
 
   return (
@@ -679,7 +697,14 @@ export default function StudioPage() {
           <div className="card-quiet flex min-h-0 flex-1 flex-col p-3">
             <div className="display text-[13.5px] font-semibold">{T('Queue')}</div>
             <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-              {orders.map((o) => (
+              {queueGroups.map((g) => (
+                <div key={g.key} className="space-y-1.5">
+                  {showGroupHeaders && (
+                    <div className="mono pt-1 text-[10px] uppercase tracking-wide text-zinc-500">
+                      {g.label} ({g.items.length})
+                    </div>
+                  )}
+              {g.items.map((o) => (
                 <button
                   key={o.id}
                   onClick={() => setSelectedId(o.id)}
@@ -707,7 +732,9 @@ export default function StudioPage() {
                   )}
                 </button>
               ))}
-              {orders.length === 0 && <div className="text-[11.5px] text-zinc-600">No orders yet. Fire a brief.</div>}
+                </div>
+              ))}
+              {orders.length === 0 && <div className="text-[11.5px] text-zinc-600">{T('No orders yet. Fire a brief.')}</div>}
             </div>
           </div>
         </div>
