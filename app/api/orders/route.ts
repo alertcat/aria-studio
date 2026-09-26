@@ -33,11 +33,13 @@ export async function POST(req: Request) {
     brief: body.brief,
     amountUsd: Number(body.amountUsd),
     vertical: body.vertical,
+    lang: body.lang,
   }
   if (!input?.title || !input?.brief) {
     return Response.json({ error: 'title and brief required' }, { status: 400 })
   }
-  const order = st.createOrder(input)
+  const lang = body.lang === 'zh' || body.lang === 'en' ? body.lang : undefined
+  const order = st.createOrder({ ...input, lang })
   void st.runPipeline(order.id)
   return Response.json({ ok: true, id: order.id })
 }

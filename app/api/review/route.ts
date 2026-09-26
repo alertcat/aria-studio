@@ -36,7 +36,8 @@ export async function POST(req: Request) {
         return Response.json({ error: 'insufficient balance', remainingUsd: b.remainingUsd, needUsd: need }, { status: 402 })
       }
     }
-    void st.runRevision(String(orderId), String(feedback || 'Tighten the concept and make the product the hero.'), key)
+    const lang = body.lang === 'zh' || body.lang === 'en' ? body.lang : undefined
+    void st.runRevision(String(orderId), String(feedback || 'Tighten the concept and make the product the hero.'), key, lang)
   } else {
     return Response.json({ error: 'unknown action' }, { status: 400 })
   }

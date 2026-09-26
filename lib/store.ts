@@ -79,6 +79,8 @@ export type Order = {
   videoInterrupted?: boolean
   /** model, resolution, duration and ratio the customer chose at the gate */
   spec?: Spec
+  /** UI language when the brief was fired; concepts and jury reasons follow it */
+  lang?: 'zh' | 'en'
   feedback?: string
   invoice?: { id: string; paidAt: number; ref: string }
   error?: string
@@ -320,6 +322,7 @@ function agent(id: string) {
 
 /** Simplified Chinese when the brief is written in Chinese, otherwise the brief's own language. */
 function briefLang(o?: Order): 'zh' | 'en' {
+  if (o?.lang === 'zh' || o?.lang === 'en') return o.lang
   return o && /[\u4e00-\u9fff]/.test(o.title + ' ' + o.brief) ? 'zh' : 'en'
 }
 const langName = (o?: Order) => (briefLang(o) === 'zh' ? 'Simplified Chinese' : 'English')
@@ -701,7 +704,7 @@ async function runPipeline(orderId: string) {
   }
 }
 
-async function runRevision(orderId: string, feedback: string, apiKey?: string) {
+async function runRevision(orderId: string, feedback: string, apiKey?: string, lang?: 'zh' | 'en') {
   const o = S.state.orders.find((x) => x.id === orderId)
   if (!o || !o.winnerAgentId) return
   if (PILOT && !apiKey) return
@@ -709,6 +712,7 @@ async function runRevision(orderId: string, feedback: string, apiKey?: string) {
     o.status = 'revising'
     o.revision += 1
     o.feedback = feedback
+    if (lang) o.lang = lang
     const w = agent(o.winnerAgentId)
     ev('REV', `Sent "${o.title}" back to ${w.name} with notes`, o.id)
     saveSoon()
@@ -834,6 +838,7 @@ function approveOrder(orderId: string) {
 }
 
 function createOrder(input: {
+  lang?: 'zh' | 'en'
   client: string
   title: string
   brief: string
@@ -846,6 +851,7 @@ function createOrder(input: {
     title: input.title.slice(0, 120) || 'Untitled order',
     brief: input.brief.slice(0, 2000),
     vertical: (input.vertical || 'custom').slice(0, 40),
+    lang: input.lang,
     amountUsd: Math.max(1, Math.min(100000, Math.round(input.amountUsd || 100))),
     cogsUsd: 0,
     status: 'inbox',

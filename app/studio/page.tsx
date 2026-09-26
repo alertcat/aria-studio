@@ -237,6 +237,11 @@ export default function StudioPage() {
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
       const query = new URLSearchParams(window.location.search)
       t = hash.get('theme') || query.get('theme') || localStorage.getItem('aria_theme') || ''
+      const l = (hash.get('lang') || query.get('lang') || '').toLowerCase()
+      if (l.startsWith('zh') || l === 'en') {
+        langTouched.current = true
+        setLang(l.startsWith('zh') ? 'zh' : 'en')
+      }
       if (t !== 'light' && t !== 'dark') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
     } catch {
       t = 'dark'
@@ -567,7 +572,7 @@ export default function StudioPage() {
               {templates.map((t, i) => (
                 <button
                   key={i}
-                  onClick={() => post('/api/orders', { template: i })}
+                  onClick={() => post('/api/orders', { template: i, lang })}
                   disabled={pilot && needLogin}
                   style={pilot && needLogin ? { opacity: 0.4 } : undefined}
                   className="btn-ghost flex items-center justify-between rounded-lg px-3 py-2 text-left text-[12px]"
@@ -645,7 +650,7 @@ export default function StudioPage() {
                 />
               </div>
               <button
-                onClick={() => post('/api/orders', custom)}
+                onClick={() => post('/api/orders', { ...custom, lang })}
               disabled={pilot && needLogin}
               style={pilot && needLogin ? { opacity: 0.4 } : undefined}
                 className="btn-primary flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold"
@@ -1124,7 +1129,7 @@ export default function StudioPage() {
                           />
                           <button
                             onClick={() => {
-                              post('/api/review', { orderId: selected.id, action: 'revise', feedback: feedbackText }, true)
+                              post('/api/review', { orderId: selected.id, action: 'revise', feedback: feedbackText, lang }, true)
                               setFeedbackText('')
                             }}
                             className="btn-ghost flex items-center gap-1 rounded-lg px-3 py-2 text-[12px] font-medium"
