@@ -202,10 +202,6 @@ export default function StudioPage() {
       }
       const json: ApiState = await res.json()
       setNeedLogin(!!json.needKey)
-      if ((json.pilot || json.tenant?.pilot) && !langTouched.current) {
-        langTouched.current = true
-        setLang('zh')
-      }
       setData(json)
       const present = selectedRef.current ? json.state.orders.some((o) => o.id === selectedRef.current) : false
       if (json.state.orders.length === 0) {
@@ -248,10 +244,12 @@ export default function StudioPage() {
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
       const query = new URLSearchParams(window.location.search)
       t = hash.get('theme') || query.get('theme') || localStorage.getItem('aria_theme') || ''
-      const l = (hash.get('lang') || query.get('lang') || '').toLowerCase()
-      if (l.startsWith('zh') || l === 'en') {
+      const fromUrl = (hash.get('lang') || query.get('lang') || '').toLowerCase()
+      const saved = (localStorage.getItem('aria_lang') || '').toLowerCase()
+      const pick = fromUrl.startsWith('zh') || fromUrl === 'en' ? fromUrl : saved
+      if (pick.startsWith('zh') || pick === 'en') {
         langTouched.current = true
-        setLang(l.startsWith('zh') ? 'zh' : 'en')
+        setLang(pick.startsWith('zh') ? 'zh' : 'en')
       }
       if (t !== 'light' && t !== 'dark') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
     } catch {
@@ -526,7 +524,13 @@ export default function StudioPage() {
           <button
             onClick={() => {
               langTouched.current = true
-              setLang(lang === 'en' ? 'zh' : 'en')
+              const next: Lang = lang === 'en' ? 'zh' : 'en'
+              setLang(next)
+              try {
+                localStorage.setItem('aria_lang', next)
+              } catch {
+                /* storage unavailable */
+              }
             }}
             className="btn-ghost rounded-full px-2.5 py-1 text-[11px]"
           >
