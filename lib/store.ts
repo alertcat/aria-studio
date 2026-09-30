@@ -229,6 +229,11 @@ const COST = PILOT
   : UNIT_COSTS
 const renderCost = (o: Order) => (PILOT ? estimateUsd(o.spec ?? DEFAULT_SPEC) : COST.render)
 const specKey = (sp: Spec) => `${sp.model}-${sp.resolution}-${sp.duration}-${sp.ratio}`
+/** Media cache key = the exact render request (prompt, face, spec), never just the order title. */
+const mediaKey = (kind: 'video' | 'poster', ...parts: string[]) =>
+  cacheKey(tenant.id, kind, crypto.createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 24))
+/** Customers pay per render and expect the concept they approved: the pilot never replays a cached cut. */
+const REPLAY_MEDIA = !PILOT
 
 type Store = {
   state: State
@@ -544,25 +549,22 @@ async function runProduction(o: Order, apiKey?: string) {
   ev('PROD', `Studio rendering "${winner.concept.concept}" (${specLabel(spec)})${spec.poster === false ? '' : ' plus campaign poster (gpt-image-2)'}`, o.id)
   saveSoon()
 
-  const vKey = cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '', specKey(spec))
-  const pKey = cacheKey(tenant.id, 'poster', o.title, o.winnerAgentId ?? '', o.revision)
+  const posterSize = spec.ratio === '16:9' || spec.ratio === '4:3' ? '1536x1024' : spec.ratio === '1:1' ? '1024x1024' : '1024x1536'
+  const vKey = mediaKey('video', winner.concept.video_prompt, o.talentId ?? '', specKey(spec))
+  const pKey = mediaKey('poster', posterPrompt(o, winner.concept), posterSize)
   const videoName = `${o.id}_r${o.revision}.mp4`
   const posterName = `${o.id}_r${o.revision}.png`
 
   const posterTask = spec.poster === false ? Promise.resolve() : (async () => {
-    const { cachedVideoFile: cachedPoster } = readMediaCache(pKey)
+    const { cachedVideoFile: cachedPoster } = REPLAY_MEDIA ? readMediaCache(pKey) : {}
     if (cachedPoster && fs.existsSync(path.join(MEDIA_DIR, cachedPoster))) {
-      await sleep(2500 + Math.random() * 2000)
       o.posterFile = `/m/${cachedPoster}`
-      ev('IMG', `Campaign poster ready`, o.id)
+      ev('IMG', `Same poster prompt as an earlier job: reusing that key visual, no new charge`, o.id)
       saveSoon()
       return
     }
     try {
-      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName), {
-        apiKey,
-        size: spec.ratio === '16:9' || spec.ratio === '4:3' ? '1536x1024' : spec.ratio === '1:1' ? '1024x1024' : '1024x1536',
-      })
+      await generateImage(posterPrompt(o, winner.concept), path.join(MEDIA_DIR, posterName), { apiKey, size: posterSize })
       o.posterFile = `/m/${posterName}`
       o.cogsUsd += COST.poster
       writeMediaCache(pKey, posterName)
@@ -575,15 +577,12 @@ async function runProduction(o: Order, apiKey?: string) {
   })()
 
   const videoTask = (async () => {
-    const { cachedVideoFile } = readMediaCache(vKey)
+    const { cachedVideoFile } = REPLAY_MEDIA ? readMediaCache(vKey) : {}
     if (cachedVideoFile && fs.existsSync(path.join(MEDIA_DIR, cachedVideoFile))) {
-      for (const p of [14, 37, 61, 82, 97]) {
-        o.videoProgress = p
-        saveSoon()
-        await sleep(1100 + Math.random() * 800)
-      }
       o.videoFile = `/m/${cachedVideoFile}`
       o.videoProgress = 100
+      ev('PROD', `Same prompt, face and spec as an earlier job: reusing that cut, no new charge`, o.id)
+      saveSoon()
       return
     }
     let lastLogged = -20
@@ -641,7 +640,7 @@ async function runProduction(o: Order, apiKey?: string) {
   try {
     await Promise.all([videoTask, posterTask])
     o.status = 'review'
-    ev('GATE', `Cut and key visual are ready for your acceptance`, o.id)
+    ev('GATE', o.posterFile ? `Cut and key visual are ready for your acceptance` : `Cut is ready for your acceptance`, o.id)
   } catch (e) {
     const msg = (e as Error).message
     console.error('[video] render failed:', msg)
@@ -763,7 +762,8 @@ async function resumeRender(orderId: string, apiKey?: string): Promise<{ ok: boo
       o.videoInterrupted = undefined
       o.cogsUsd += renderCost(o)
       o.status = 'review'
-      writeMediaCache(cacheKey(tenant.id, 'video', o.title, o.winnerAgentId ?? '', o.revision, o.talentId ?? '', specKey(o.spec ?? DEFAULT_SPEC)), videoName)
+      const w = o.drafts.find((d) => d.agentId === o.winnerAgentId)
+      if (w) writeMediaCache(mediaKey('video', w.concept.video_prompt, o.talentId ?? '', specKey(o.spec ?? DEFAULT_SPEC)), videoName)
       ev('PROD', `Fetched the finished render for "${o.title}" from upstream, no new charge`, o.id)
       ev('GATE', `Cut is ready for your acceptance`, o.id)
     } else if (r.status === 'failed') {
