@@ -95,7 +95,7 @@ const zh: Record<string, string> = {
   'balance': '余额',
   'GATE 1 / pick the concept to render.': '第一道审核 / 选择要渲染的方案。',
   'Approving pre-charges about': '批准后将从您的 RelayDance 余额预扣约',
-  'to your RelayDance balance, settled to actual output on completion; failed renders are refunded in full.': '，完成后按实际输出结算多退少补，渲染失败全额退回。方案和评审不计费。',
+  'to your RelayDance balance, settled to actual output on completion; failed renders are refunded in full.': '，完成后按实际输出结算，多退少补，渲染失败全额退回。方案和评审不计费。',
   'A revision renders again, about': '打回修改会再次渲染，约',
   'Insufficient RelayDance balance': 'RelayDance 余额不足',
   'This key does not match the current session. Log out and sign in again.': '这个 Key 与当前会话不匹配，请退出后重新登录。',

@@ -1141,7 +1141,7 @@ export default function StudioPage() {
                     {selected.status === 'review' && (
                       <div className="mt-3">
                         <div className="mono mb-1.5 text-[11px] text-zinc-200">
-                          {pilot ? `${T('GATE 2 / accept to deliver, send back to revise')} ${T('A revision renders again, about')} $${orderCharge(selected)}.` : T('GATE 2 / your acceptance releases the escrow')}
+                          {pilot ? `${T('GATE 2 / accept to deliver, send back to revise')}${lang === 'zh' ? '。' : '.'} ${T('A revision renders again, about')} $${orderCharge(selected)}${lang === 'zh' ? '。' : '.'}` : T('GATE 2 / your acceptance releases the escrow')}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
