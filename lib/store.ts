@@ -191,6 +191,14 @@ export const JUDGES = [
 
 export const TEMPLATES = [
   {
+    client: 'Kaya & Co.',
+    vertical: 'product ad',
+    title: '5s launch teaser: kaya toast morning',
+    brief:
+      'Singapore breakfast brand launching a new kaya toast set. Audience: 25 to 40 office workers. Feel: the first bite on a slow Saturday morning. Warm, local, premium but not corporate. End on the plate.',
+    amountUsd: 350,
+  },
+  {
     client: 'Kopi Loco',
     vertical: 'product ad',
     title: '5s vertical bumper: cold brew can launch',
