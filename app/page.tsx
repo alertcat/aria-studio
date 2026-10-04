@@ -498,7 +498,7 @@ export default function Page() {
               </h2>
               <p className="mt-3 max-w-[58ch] text-[14px] leading-relaxed text-zinc-400">
                 The jury is the economic filter: pairwise Claude duels aggregated with
-                Bradley-Terry, the same mechanism that took rank 1 in Ethereum Foundation&apos;s
+                Bradley-Terry, the same mechanism that placed top five in Ethereum Foundation&apos;s
                 Deep Funding contest.
               </p>
             </motion.div>
