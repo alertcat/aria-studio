@@ -1,5 +1,5 @@
 // Bradley-Terry aggregation of pairwise duel outcomes.
-// Same mechanism the founder used to win GG24 Deep Funding L3 (#1):
+// Same mechanism the founder used in GG24 Deep Funding L3 (top five on the hidden human jury):
 // LLM jurors produce pairwise verdicts, BT MLE turns them into a global ranking.
 
 export type Comparison = { winner: string; loser: string }
