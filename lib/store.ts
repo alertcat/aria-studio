@@ -278,6 +278,10 @@ function createStore(): Store {
             o.status = o.drafts?.length === 3 && o.ranking?.length ? 'greenlight' : 'inbox'
           }
         }
+        // concepts and jury interrupted by the restart (or left in the inbox by
+        // an earlier one): run the pipeline again once the store is up. It is
+        // cheap, idempotent, and charges the customer nothing.
+        if (o.status === 'inbox' && Date.now() - o.createdAt < 24 * 3600 * 1000) resumeAfterRestart.push(o.id)
       }
       if (disk.agents) {
         for (const a of store.agents) {
@@ -297,9 +301,18 @@ function createStore(): Store {
   return store
 }
 
+const resumeAfterRestart: string[] = []
 const S = createStore()
 // a restart marks in-flight renders as interrupted in memory; persist that right away
 if (S.state.orders.some((o) => o.videoInterrupted)) saveSoon()
+if (resumeAfterRestart.length) {
+  setTimeout(() => {
+    for (const id of resumeAfterRestart) {
+      console.log(`[store] ${tenant.id}: resuming concepts and jury for ${id} after restart`)
+      void runPipeline(id)
+    }
+  }, 1500)
+}
 
 function getStore() {
   return S
